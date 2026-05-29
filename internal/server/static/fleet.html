@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fleet View — ShardKV</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #050a14;
+  --bg2:       #080f1d;
+  --bg3:       #0b1422;
+  --border:    #142030;
+  --border-lo: #0a1620;
+  --text:      #b0c8e0;
+  --text-dim:  #364e62;
+  --text-hi:   #ddeeff;
+  --gold:      #ffd54f;
+  --gold-lo:   #b8922a;
+  --amber:     #ffb300;
+  --cyan:      #40c4ff;
+  --cyan-lo:   #16607a;
+  --danger:    #ef5350;
+  --ok:        #4caf50;
+  --warn:      #ff9800;
+  --purple:    #7c4dff;
+  --log-ok:    #00e676;
+  --log-warn:  #ffd740;
+  --log-err:   #ff5252;
+  --log-info:  #40c4ff;
+  --log-sys:   #2e4a5f;
+}
+
+html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text);
+             font-family: 'Courier New', Courier, monospace; overflow: hidden; }
+
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ═══ HEADER ═══════════════════════════════════════════════════ */
+#hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 22px;
+  background: rgba(5,10,20,.94);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0; z-index: 20;
+  backdrop-filter: blur(6px);
+}
+.hdr-left { display: flex; align-items: baseline; gap: 14px; }
+.title {
+  font-size: 16px; font-weight: 700; letter-spacing: 5px; color: var(--cyan);
+  text-shadow: 0 0 16px rgba(64,196,255,.5), 0 0 32px rgba(64,196,255,.18);
+}
+.subtitle { font-size: 9px; letter-spacing: 2.5px; color: #5a8aaa; text-transform: uppercase; }
+
+#cluster-badge {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 9.5px; letter-spacing: 2.5px;
+  padding: 5px 12px;
+  background: var(--bg3); border: 1px solid var(--border); border-radius: 2px;
+}
+#cluster-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text-dim); flex-shrink: 0;
+  transition: background .5s, box-shadow .5s;
+}
+#cluster-dot.healthy  { background: var(--ok);     box-shadow: 0 0 7px var(--ok);     animation: dot-beat 2.4s ease-in-out infinite; }
+#cluster-dot.degraded { background: var(--warn);   box-shadow: 0 0 7px var(--warn); }
+#cluster-dot.down     { background: var(--danger); box-shadow: 0 0 7px var(--danger); }
+@keyframes dot-beat { 0%,100% { box-shadow: 0 0 5px var(--ok); } 50% { box-shadow: 0 0 11px var(--ok), 0 0 20px rgba(76,175,80,.3); } }
+#cluster-label { color: var(--text-dim); transition: color .5s; }
+#cluster-label.healthy  { color: var(--ok); }
+#cluster-label.degraded { color: var(--warn); }
+#cluster-label.down     { color: var(--danger); }
+
+/* ═══ SPACE ═════════════════════════════════════════════════════ */
+#space {
+  flex: 1; position: relative; overflow: hidden;
+  background: var(--bg);
+  background-image:
+    linear-gradient(rgba(64,196,255,.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(64,196,255,.022) 1px, transparent 1px);
+  background-size: 82px 82px;
+}
+
+/* Distant sun — upper-right */
+.sun-wash   { position: absolute; inset: 0; pointer-events: none; z-index: 0;
+              background: radial-gradient(ellipse at 90% 4%, rgba(255,120,0,.044) 0%, transparent 52%); }
+.sun-halo   { position: absolute; width: 580px; height: 440px; top: -120px; right: -90px;
+              pointer-events: none; z-index: 0;
+              background: radial-gradient(ellipse at 68% 30%, rgba(255,150,0,.10) 0%, rgba(255,100,0,.05) 45%, transparent 72%); }
+.sun-corona { position: absolute; width: 260px; height: 260px; top: -60px; right: 20px;
+              pointer-events: none; z-index: 0;
+              background: radial-gradient(circle, rgba(255,200,55,.30) 0%, rgba(255,130,0,.13) 48%, transparent 72%);
+              filter: blur(24px); }
+.sun-core   { position: absolute; width: 44px; height: 44px; top: 12px; right: 82px;
+              pointer-events: none; z-index: 0; border-radius: 50%;
+              background: radial-gradient(circle, #fffde7 0%, #ffe082 38%, #ff8f00 76%, #e65100 100%);
+              box-shadow: 0 0 20px 7px rgba(255,213,79,.72), 0 0 50px 16px rgba(255,130,0,.40), 0 0 95px 38px rgba(255,70,0,.13); }
+
+/* Nebulae */
+.nebula { position: absolute; border-radius: 50%; pointer-events: none; z-index: 0; }
+.nb1 { width: 600px; height: 360px; bottom: -80px; left: -100px;
+        background: radial-gradient(ellipse, rgba(50,0,100,.10) 0%, transparent 70%);
+        filter: blur(55px); animation: nb-drift 105s ease-in-out infinite; }
+.nb2 { width: 420px; height: 280px; top: 22%; right: 15%;
+        background: radial-gradient(ellipse, rgba(0,25,75,.13) 0%, transparent 68%);
+        filter: blur(60px); animation: nb-drift 148s ease-in-out infinite reverse; }
+.nb3 { width: 320px; height: 200px; top: 6%; left: 22%;
+        background: radial-gradient(ellipse, rgba(0,45,68,.09) 0%, transparent 68%);
+        filter: blur(42px); animation: nb-drift 86s ease-in-out infinite 18s; }
+.nb4 { width: 250px; height: 160px; bottom: 20%; right: 5%;
+        background: radial-gradient(ellipse, rgba(30,0,80,.07) 0%, transparent 70%);
+        filter: blur(38px); animation: nb-drift 130s ease-in-out infinite 40s reverse; }
+@keyframes nb-drift {
+  0%  { transform: translate(0,0) scale(1); }
+  33% { transform: translate(16px,-12px) scale(1.04); }
+  66% { transform: translate(-10px,9px) scale(.97); }
+  100%{ transform: translate(0,0) scale(1); }
+}
+
+/* SVG overlay */
+#anim-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+
+/* ═══ HUD ════════════════════════════════════════════════════════ */
+#hud {
+  position: absolute; top: 18px; left: 20px; z-index: 8;
+  width: 188px;
+  background: rgba(5,10,20,.82);
+  border: 1px solid rgba(64,196,255,.18);
+  border-radius: 3px;
+  padding: 10px 13px;
+  backdrop-filter: blur(4px);
+  font-size: 10px;
+}
+.hud-title {
+  font-size: 8.5px; letter-spacing: 3px; color: #4cb8e8;
+  text-transform: uppercase; margin-bottom: 8px;
+  padding-bottom: 6px; border-bottom: 1px solid rgba(64,196,255,.18);
+}
+.hud-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  line-height: 2; color: #6a8fa8;
+}
+.hud-row .hv { color: #e8f4ff; font-variant-numeric: tabular-nums; transition: color .3s; }
+.hud-row .hv.leader-val { color: #ffd76a; }
+.hud-row .hv.ok-val     { color: #4de894; }
+.hud-row .hv.warn-val   { color: #ff9e40; }
+.hud-sep { border-top: 1px solid rgba(64,196,255,.14); margin: 4px 0; }
+
+/* ═══ FLEET ══════════════════════════════════════════════════════ */
+#fleet {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  gap: 60px; z-index: 2; padding: 16px;
+}
+
+/* ═══ NODE CARD ══════════════════════════════════════════════════ */
+.node-card {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  width: 240px; position: relative;
+  transition: transform .65s cubic-bezier(.34,1.56,.64,1), opacity .5s;
+}
+.node-card.state-leader    { transform: translateY(-28px); }
+.node-card.state-follower  { transform: translateY(10px); }
+.node-card.state-candidate { transform: translateY(0); }
+.node-card.state-down      { transform: translateY(14px); opacity: .30; }
+
+/* warm ambient bloom behind leader card */
+.node-card.state-leader::before {
+  content: ''; position: absolute; inset: -40px -30px;
+  background: radial-gradient(ellipse, rgba(255,200,55,.06) 0%, transparent 68%);
+  pointer-events: none; z-index: -1;
+}
+
+/* ═══ SHIP WRAP ══════════════════════════════════════════════════ */
+.ship-wrap {
+  position: relative; width: 240px; height: 310px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* Command rings (leader only) */
+.cmd-ring, .cmd-ring-2 {
+  position: absolute; inset: 6px;
+  border-radius: 50%;
+  border: 1px dashed rgba(255,213,79,0);
+  pointer-events: none;
+  transition: border-color .7s;
+}
+.cmd-ring   { animation: ring-cw  22s linear infinite; }
+.cmd-ring-2 { animation: ring-ccw 36s linear infinite; inset: -2px; border-style: solid; }
+.node-card.state-leader .cmd-ring   { border-color: rgba(255,213,79,.44); }
+.node-card.state-leader .cmd-ring-2 { border-color: rgba(255,213,79,.16); }
+@keyframes ring-cw  { to { transform: rotate( 360deg); } }
+@keyframes ring-ccw { to { transform: rotate(-360deg); } }
+
+/* Candidate ring */
+.cand-ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 2px solid var(--purple); opacity: 0; pointer-events: none;
+}
+.node-card.state-candidate .cand-ring { animation: cand-pulse 1.8s ease-in-out infinite; }
+@keyframes cand-pulse { 0% { transform: scale(.40); opacity: .90; } 100% { transform: scale(1.55); opacity: 0; } }
+
+/* Ship glow — most important visual differentiator */
+.ship-svg-wrap { transition: filter .65s; }
+.node-card.state-leader .ship-svg-wrap {
+  filter:
+    drop-shadow(0 0  4px rgba(255,213,79,.65))
+    drop-shadow(0 0 12px rgba(64,196,255,.80))
+    drop-shadow(0 0 28px rgba(64,196,255,.40))
+    drop-shadow(0 0 52px rgba(64,196,255,.16));
+}
+.node-card.state-follower .ship-svg-wrap {
+  filter: drop-shadow(0 0 6px rgba(13,71,161,.65));
+}
+.node-card.state-candidate .ship-svg-wrap {
+  filter: drop-shadow(0 0 10px rgba(124,77,255,.70));
+}
+.node-card.state-down .ship-svg-wrap {
+  filter: grayscale(1) brightness(.25);
+}
+
+/* Engine glow pulses */
+@keyframes eng-idle { 0%,100% { opacity: .60; } 50% { opacity: .95; } }
+.node-card.state-leader    .eng { animation: eng-idle 1.0s ease-in-out infinite; }
+.node-card.state-follower  .eng { animation: eng-idle 2.3s ease-in-out infinite; opacity: .35; }
+.node-card.state-candidate .eng { animation: eng-idle .60s ease-in-out infinite; }
+.node-card.state-down      .eng { animation: none; opacity: 0 !important; }
+
+/* Gradual engine power-up on recovery */
+@keyframes eng-powerup { 0% { opacity: 0; } 100% { opacity: .60; } }
+.node-card.recovering .eng { animation: eng-powerup 2.8s ease-in forwards !important; }
+
+/* ═══ NODE INFO ══════════════════════════════════════════════════ */
+.node-info {
+  width: 100%;
+  background: var(--bg2);
+  border: 1px solid var(--border-lo);
+  border-radius: 3px;
+  padding: 9px 12px;
+  font-size: 10.5px; line-height: 1.9;
+  transition: border-color .5s, background .5s, box-shadow .5s;
+}
+.node-card.state-leader .node-info {
+  border-color: rgba(255,213,79,.52);
+  background: linear-gradient(145deg, rgba(20,14,3,.96) 0%, var(--bg2) 100%);
+  box-shadow: 0 0 16px rgba(255,200,55,.055) inset;
+}
+.node-card.state-follower  .node-info { border-color: rgba(64,196,255,.22); }
+.node-card.state-candidate .node-info { border-color: rgba(124,77,255,.45); }
+.node-card.state-down      .node-info { border-color: rgba(239,83,80,.35); }
+
+.node-id {
+  font-size: 12px; font-weight: 700; letter-spacing: 2.5px;
+  color: var(--text-hi); margin-bottom: 1px; transition: color .5s;
+}
+.node-card.state-leader .node-id { color: var(--gold); }
+
+.node-role {
+  font-size: 8.5px; letter-spacing: 3.5px; font-weight: 700;
+  text-transform: uppercase; margin-bottom: 6px; transition: color .5s;
+}
+.node-card.state-leader    .node-role { color: var(--gold); }
+.node-card.state-follower  .node-role { color: #4cb8e8; }
+.node-card.state-candidate .node-role { color: #c5b0f5; }
+.node-card.state-down      .node-role { color: #ff7070; }
+
+.n-row { display: flex; justify-content: space-between; color: #6a8fa8; }
+.n-row .nv { color: #e8f4ff; font-variant-numeric: tabular-nums; }
+.n-row .nv.flash {
+  color: var(--cyan); animation: nv-flash .9s ease-out forwards;
+}
+@keyframes nv-flash { 0% { color: #fff; } 100% { color: var(--cyan); } }
+
+/* ═══ CONSOLE ════════════════════════════════════════════════════ */
+#console-panel {
+  flex-shrink: 0; z-index: 20;
+  background: rgba(4,10,22,.98);
+  border-top: 2px solid rgba(64,196,255,.25);
+  display: flex; flex-direction: column;
+  transition: height .28s ease;
+  height: 240px;
+}
+#console-panel.collapsed { height: 36px; }
+
+#console-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 18px;
+  height: 36px;
+  background: rgba(6,14,28,.99);
+  border-bottom: 1px solid rgba(64,196,255,.18);
+  flex-shrink: 0;
+  cursor: pointer;
+  user-select: none;
+}
+#console-panel.collapsed #console-hdr { border-bottom: none; }
+
+.con-hdr-l { display: flex; align-items: center; gap: 10px; }
+.con-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan-lo); flex-shrink: 0; }
+.con-dot.blink { animation: con-blink .4s ease-out 2; }
+@keyframes con-blink { 0%,100% { background: var(--cyan-lo); } 50% { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); } }
+.con-title { font-size: 9px; letter-spacing: 3.5px; color: #7ab8d8; text-transform: uppercase; font-weight: 700; }
+#con-evt-ct { font-size: 8px; color: #6a9ab8; letter-spacing: 1.5px; padding: 2px 6px; background: rgba(20,50,80,.5); border: 1px solid rgba(64,196,255,.20); border-radius: 2px; }
+#con-toggle { font-size: 10px; color: #5a8aaa; cursor: pointer; background: none; border: none; padding: 4px 6px; }
+#con-toggle:hover { color: var(--cyan); }
+
+#console-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+#console-panel.collapsed #console-body { visibility: hidden; }
+
+#log-body {
+  flex: 1; overflow-y: auto; padding: 4px 0 4px 0;
+  display: flex; flex-direction: column-reverse;
+}
+#log-body::-webkit-scrollbar { width: 4px; }
+#log-body::-webkit-scrollbar-thumb { background: rgba(64,196,255,.20); border-radius: 2px; }
+#log-body::-webkit-scrollbar-track { background: transparent; }
+
+.log-entry {
+  padding: 3px 18px 3px 16px; font-size: 11px; line-height: 1.55;
+  display: flex; gap: 10px; align-items: baseline;
+  border-left: 3px solid transparent;
+  transition: opacity 14s ease-out;
+}
+.log-entry + .log-entry { border-top: 1px solid rgba(255,255,255,.03); }
+.log-entry.fade { opacity: .18; }
+
+/* border-left accent — stronger, fully opaque */
+.log-entry.info   { border-left-color: rgba(64,196,255,.65); }
+.log-entry.ok     { border-left-color: rgba(0,230,118,.65); }
+.log-entry.warn   { border-left-color: rgba(255,213,79,.75); }
+.log-entry.err    { border-left-color: rgba(255,82,82,.75); }
+.log-entry.system { border-left-color: rgba(80,110,140,.45); }
+
+/* subtle row tint */
+.log-entry.info   { background: rgba(64,196,255,.025); }
+.log-entry.ok     { background: rgba(0,230,118,.025); }
+.log-entry.warn   { background: rgba(255,213,79,.030); }
+.log-entry.err    { background: rgba(255,82,82,.030); }
+
+.log-ts  { color: #b8c5d6; flex-shrink: 0; font-size: 10px; letter-spacing: .3px; }
+.log-sep { color: #5a7890;  flex-shrink: 0; }
+.log-msg { color: #eaf4ff; }
+
+.log-entry.info   .log-msg { color: #62d8ff; }
+.log-entry.ok     .log-msg { color: #4de894; }
+.log-entry.warn   .log-msg { color: #ffd76a; }
+.log-entry.err    .log-msg { color: #ff7070; }
+.log-entry.system .log-msg { color: #98b8cc; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Header ─────────────────────────────────────────────── -->
+  <header id="hdr">
+    <div class="hdr-left">
+      <span class="title">FLEET VIEW</span>
+      <span class="subtitle">ShardKV &mdash; Distributed Raft Monitor</span>
+    </div>
+    <div id="cluster-badge">
+      <div id="cluster-dot"></div>
+      <span id="cluster-label">CONNECTING</span>
+    </div>
+  </header>
+
+  <!-- ── Space ──────────────────────────────────────────────── -->
+  <div id="space">
+    <div class="sun-wash"></div>
+    <div class="sun-halo"></div>
+    <div class="sun-corona"></div>
+    <div class="sun-core"></div>
+    <div class="nebula nb1"></div>
+    <div class="nebula nb2"></div>
+    <div class="nebula nb3"></div>
+    <div class="nebula nb4"></div>
+
+    <!-- Cluster HUD -->
+    <div id="hud">
+      <div class="hud-title">Cluster Status</div>
+      <div class="hud-row"><span>LEADER</span>    <span class="hv" id="hud-leader">—</span></div>
+      <div class="hud-row"><span>TERM</span>      <span class="hv" id="hud-term">—</span></div>
+      <div class="hud-sep"></div>
+      <div class="hud-row"><span>COMMIT</span>    <span class="hv" id="hud-commit">—</span></div>
+      <div class="hud-row"><span>ONLINE</span>    <span class="hv" id="hud-online">—</span></div>
+      <div class="hud-row"><span>REP LAG</span>  <span class="hv" id="hud-lag">—</span></div>
+    </div>
+
+    <!-- SVG: stars + formation lines + animations -->
+    <svg id="anim-layer" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="glow-sm" x="-50%"  y="-50%"  width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3"  result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="glow-lg" x="-100%" y="-100%" width="300%" height="300%">
+          <feGaussianBlur stdDeviation="8"  result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="glow-star" x="-200%" y="-200%" width="500%" height="500%">
+          <feGaussianBlur stdDeviation="1.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <g id="stars-g"></g>
+      <g id="form-g"></g>
+    </svg>
+
+    <div id="fleet"></div>
+  </div>
+
+  <!-- ── Engineering Console ────────────────────────────────── -->
+  <div id="console-panel">
+    <div id="console-hdr" onclick="toggleConsole()">
+      <div class="con-hdr-l">
+        <div class="con-dot" id="con-dot"></div>
+        <span class="con-title">Engineering Console</span>
+        <span id="con-evt-ct">0 EVENTS</span>
+      </div>
+      <button id="con-toggle">▼</button>
+    </div>
+    <div id="console-body">
+      <div id="log-body"></div>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<script>
+'use strict';
+
+// ════════════════════════════════════════════════════════════════
+// Ship SVG definitions — 1.6× scale vs original
+// ════════════════════════════════════════════════════════════════
+
+const CMD_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-58 -76 116 150" width="210" height="273">
+  <!-- engine plumes (back-layer) -->
+  <ellipse class="eng" cx="-11" cy="64" rx="5.5" ry="13"  fill="#ff8800" opacity=".72"/>
+  <ellipse class="eng" cx=" 11" cy="64" rx="5.5" ry="13"  fill="#ff8800" opacity=".72"/>
+  <ellipse class="eng" cx="-11" cy="60" rx="2.8" ry="7.5" fill="#ffcc00" opacity=".88"/>
+  <ellipse class="eng" cx=" 11" cy="60" rx="2.8" ry="7.5" fill="#ffcc00" opacity=".88"/>
+
+  <!-- wing shadow undersides -->
+  <polygon points="-19,20 -56,52 -29,-3" fill="#060f35"/>
+  <polygon points=" 19,20  56,52  29,-3" fill="#060f35"/>
+
+  <!-- main hull body -->
+  <polygon points="0,-73  17,20  0,12  -17,20" fill="#1565c0"/>
+  <!-- bright centerline spine -->
+  <polygon points="0,-73  5,20   0,12  -5,20"  fill="#1e88e5"/>
+  <polygon points="0,-73  2,20   0,12  -2,20"  fill="#42a5f5" opacity=".55"/>
+
+  <!-- wing panels -->
+  <polygon points="-17,20 -56,52 -30, 3" fill="#0d47a1"/>
+  <polygon points=" 17,20  56,52  30, 3" fill="#0d47a1"/>
+
+  <!-- sun-side warm reflection — right face toward upper-right -->
+  <polygon points="17,20 56,52 30,3"       fill="#ff9500" opacity=".09"/>
+  <polygon points="5,-73 17,20 5,12"        fill="#ff8c00" opacity=".07"/>
+  <rect    x="7" y="48" width="10" height="18" rx="3" fill="#ff8c00" opacity=".10"/>
+
+  <!-- gold leading-edge wing highlights -->
+  <line x1="-17" y1="20" x2="-56" y2="52" stroke="#ffd54f" stroke-width="1.3" opacity=".52"/>
+  <line x1=" 17" y1="20" x2=" 56" y2="52" stroke="#ffd54f" stroke-width="1.3" opacity=".52"/>
+
+  <!-- hull panel structural lines -->
+  <line x1="-10" y1="-8"  x2="-14" y2="20" stroke="#1976d2" stroke-width=".8" opacity=".55"/>
+  <line x1=" 10" y1="-8"  x2=" 14" y2="20" stroke="#1976d2" stroke-width=".8" opacity=".55"/>
+  <line x1="-6"  y1="-42" x2="-10" y2="-4" stroke="#1976d2" stroke-width=".6" opacity=".38"/>
+  <line x1=" 6"  y1="-42" x2=" 10" y2="-4" stroke="#1976d2" stroke-width=".6" opacity=".38"/>
+
+  <!-- command bridge + cockpit layers -->
+  <ellipse cx="0" cy="-44" rx="11"  ry="15"   fill="#1e88e5"/>
+  <ellipse cx="0" cy="-47" rx="7.5" ry="10.5" fill="#64b5f6" opacity=".65"/>
+  <ellipse cx="0" cy="-50" rx="4.5" ry="6"    fill="#e3f2fd" opacity=".42"/>
+
+  <!-- sensor dashed ring -->
+  <ellipse cx="0" cy="-44" rx="15" ry="19" fill="none"
+           stroke="#4fc3f7" stroke-width=".7" stroke-dasharray="2.5 5" opacity=".48"/>
+
+  <!-- gold command stripe (primary + hairline) -->
+  <rect x="-18" y="16" width="36" height="4"   fill="#ffd54f" rx="1"/>
+  <rect x="-12" y="21" width="24" height="1.5" fill="#ffb300" rx=".5" opacity=".65"/>
+
+  <!-- engine nacelles -->
+  <rect x="-17" y="48" width="10" height="18" rx="3" fill="#092060"/>
+  <rect x="  7" y="48" width="10" height="18" rx="3" fill="#092060"/>
+  <rect x="-15" y="48" width="6"  height="5"  rx="1" fill="#1565c0" opacity=".75"/>
+  <rect x="  9" y="48" width="6"  height="5"  rx="1" fill="#1565c0" opacity=".75"/>
+
+  <!-- wing-tip nav lights — GOLD on command ship -->
+  <circle cx="-56" cy="52" r="3.2" fill="#ffd54f" opacity=".95"/>
+  <circle cx=" 56" cy="52" r="3.2" fill="#ffd54f" opacity=".95"/>
+
+  <!-- nose accent -->
+  <ellipse cx="0" cy="-69" rx="2.5" ry="3.5" fill="#80deea" opacity=".80"/>
+</svg>`;
+
+const SUP_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-44 -58 88 116" width="158" height="210">
+  <!-- engine exhaust (dimmer, slower) -->
+  <ellipse class="eng" cx="-7" cy="46" rx="4"   ry="9"   fill="#c94400" opacity=".50"/>
+  <ellipse class="eng" cx=" 7" cy="46" rx="4"   ry="9"   fill="#c94400" opacity=".50"/>
+  <ellipse class="eng" cx="-7" cy="43" rx="2"   ry="5"   fill="#e65100" opacity=".65"/>
+  <ellipse class="eng" cx=" 7" cy="43" rx="2"   ry="5"   fill="#e65100" opacity=".65"/>
+
+  <!-- wing shadow undersides (noticeably darker) -->
+  <polygon points="-13,15 -40,36 -18,-3" fill="#040c24"/>
+  <polygon points=" 13,15  40,36  18,-3" fill="#040c24"/>
+
+  <!-- main hull — darker blue, no gold -->
+  <polygon points="0,-54  12,15  0,9  -12,15" fill="#0d47a1"/>
+  <polygon points="0,-54  3.5,15 0,9  -3.5,15" fill="#1565c0"/>
+
+  <!-- wing panels -->
+  <polygon points="-12,15 -40,36 -21, 2" fill="#0a3880"/>
+  <polygon points=" 12,15  40,36  21, 2" fill="#0a3880"/>
+
+  <!-- wing leading edges — blue only, no gold -->
+  <line x1="-12" y1="15" x2="-40" y2="36" stroke="#1565c0" stroke-width="1"   opacity=".52"/>
+  <line x1=" 12" y1="15" x2=" 40" y2="36" stroke="#1565c0" stroke-width="1"   opacity=".52"/>
+
+  <!-- cockpit — smaller, dimmer than command ship -->
+  <ellipse cx="0" cy="-32" rx="7.5" ry="10.5" fill="#1565c0"/>
+  <ellipse cx="0" cy="-35" rx="4.5" ry="6.5"  fill="#90caf9" opacity=".38"/>
+
+  <!-- nacelles -->
+  <rect x="-11" y="33" width="7.5" height="12" rx="2" fill="#040c24"/>
+  <rect x="  3.5" y="33" width="7.5" height="12" rx="2" fill="#040c24"/>
+
+  <!-- nav lights — BLUE on support ships -->
+  <circle cx="-40" cy="36" r="2.2" fill="#29b6f6" opacity=".78"/>
+  <circle cx=" 40" cy="36" r="2.2" fill="#29b6f6" opacity=".78"/>
+</svg>`;
+
+// ════════════════════════════════════════════════════════════════
+// State
+// ════════════════════════════════════════════════════════════════
+let nodeConfigs = [];   // [{id, host_http_addr, raft_addr}]
+let nodeStates  = {};   // id → status
+let prevStates  = {};   // id → prev status
+let evtCount    = 0;
+const MAX_LOG   = 100;
+
+// ════════════════════════════════════════════════════════════════
+// Helpers
+// ════════════════════════════════════════════════════════════════
+const qs  = s => document.querySelector(s);
+const el  = (t,c) => { const e=document.createElement(t); if(c) e.className=c; return e; };
+const svgEl = t => document.createElementNS('http://www.w3.org/2000/svg', t);
+
+// ════════════════════════════════════════════════════════════════
+// Star field
+// ════════════════════════════════════════════════════════════════
+function drawStars() {
+  const svg = qs('#stars-g');
+  const spEl = qs('#space');
+  const W = spEl.clientWidth || window.innerWidth;
+  const H = spEl.clientHeight || window.innerHeight;
+  const avoidSun = (x,y) => x > W*.70 && y < H*.30;
+
+  const tiers = [
+    {n:200, rMin:.28, rMax:.75, opMin:.10, opMax:.40, glow:false},
+    {n: 80, rMin:.75, rMax:1.4, opMin:.28, opMax:.62, glow:false},
+    {n: 30, rMin:1.4, rMax:2.3, opMin:.45, opMax:.80, glow:false},
+    {n:  6, rMin:2.3, rMax:3.5, opMin:.68, opMax:1.0, glow:true },
+  ];
+  for (const t of tiers) {
+    for (let i=0; i<t.n; i++) {
+      let x,y,tries=0;
+      do { x=Math.random()*W; y=Math.random()*H; tries++; } while(avoidSun(x,y)&&tries<10);
+      const r   = t.rMin + Math.random()*(t.rMax-t.rMin);
+      const op  = t.opMin + Math.random()*(t.opMax-t.opMin);
+      const rnd = Math.random();
+      const fill = rnd<.58 ? '#ffffff' : rnd<.78 ? '#fff4de' : '#d8e8ff';
+      const c = svgEl('circle');
+      c.setAttribute('cx',x.toFixed(1)); c.setAttribute('cy',y.toFixed(1));
+      c.setAttribute('r', r.toFixed(1)); c.setAttribute('fill',fill);
+      c.setAttribute('opacity',op.toFixed(2));
+      if (t.glow) c.setAttribute('filter','url(#glow-star)');
+      svg.appendChild(c);
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Fetch
+// ════════════════════════════════════════════════════════════════
+async function fetchNodeList() {
+  try {
+    const r = await fetch('/fleet/nodes', {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    return await r.json();
+  } catch(e) { log('node list unavailable: '+e.message,'err'); return []; }
+}
+
+async function fetchStatus(cfg) {
+  const url = `http://${cfg.host_http_addr}/v1/status`;
+  try {
+    const r    = await fetch(url, {signal: AbortSignal.timeout(2000)});
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const data = await r.json();
+    return {
+      id:           data.node_id || cfg.id,
+      state:        (data.raft_state||'').toLowerCase(),
+      leaderAddr:   data.leader_addr  || '',
+      commitIndex:  data.commit_index  || 0,
+      appliedIndex: data.applied_index || 0,
+      term:         data.term          || 0,
+      reachable:    true,
+    };
+  } catch(_) {
+    return {id:cfg.id, state:'down', leaderAddr:'', commitIndex:0, appliedIndex:0, term:0, reachable:false};
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Render fleet cards
+// ════════════════════════════════════════════════════════════════
+function renderFleet() {
+  const fleet = qs('#fleet');
+  fleet.innerHTML = '';
+
+  for (const cfg of nodeConfigs) {
+    const card = el('div','node-card state-unknown');
+    card.id = `card-${cfg.id}`;
+
+    const wrap = el('div','ship-wrap');
+    wrap.appendChild(el('div','cand-ring'));
+    wrap.appendChild(el('div','cmd-ring'));
+    wrap.appendChild(el('div','cmd-ring-2'));
+    const svgWrap = el('div','ship-svg-wrap');
+    svgWrap.innerHTML = SUP_SVG;
+    wrap.appendChild(svgWrap);
+
+    const info = el('div','node-info');
+    info.innerHTML = `
+      <div class="node-id">${cfg.id.toUpperCase()}</div>
+      <div class="node-role" id="role-${cfg.id}">—</div>
+      <div class="n-row"><span>commit</span>  <span class="nv" id="ci-${cfg.id}">—</span></div>
+      <div class="n-row"><span>applied</span> <span class="nv" id="ai-${cfg.id}">—</span></div>
+      <div class="n-row"><span>leader</span>  <span class="nv" id="la-${cfg.id}" style="font-size:9.5px">—</span></div>
+      <div class="n-row"><span>addr</span>    <span class="nv">${cfg.host_http_addr}</span></div>
+    `;
+
+    card.appendChild(wrap);
+    card.appendChild(info);
+    fleet.appendChild(card);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Resolve a Raft address to a human-readable node ID.
+// LeaderAddr() returns the internal Raft transport address (e.g.
+// "172.19.0.5:9081" in Docker). Match by port against nodeConfigs
+// raft_addr to find the configured node ID ("node1", "node2", …).
+// Falls back to the raw address if no match is found.
+// ════════════════════════════════════════════════════════════════
+function resolveNodeDisplay(raftAddr) {
+  if (!raftAddr) return '—';
+  const colon = raftAddr.lastIndexOf(':');
+  if (colon < 0) return raftAddr;
+  const port = raftAddr.slice(colon + 1);
+  const match = nodeConfigs.find(cfg => {
+    const c = cfg.raft_addr.lastIndexOf(':');
+    return c >= 0 && cfg.raft_addr.slice(c + 1) === port;
+  });
+  return match ? match.id : raftAddr;
+}
+
+// ════════════════════════════════════════════════════════════════
+// Update node card
+// ════════════════════════════════════════════════════════════════
+function updateCard(st) {
+  const card = qs(`#card-${st.id}`);
+  if (!card) return;
+  const prev    = prevStates[st.id];
+  const svgWrap = card.querySelector('.ship-svg-wrap');
+  const isLeader = st.state === 'leader';
+
+  if (!prev || prev.state !== st.state)
+    svgWrap.innerHTML = isLeader ? CMD_SVG : SUP_SVG;
+
+  card.className = 'node-card state-' + (st.reachable ? st.state : 'down');
+
+  const roleEl = qs(`#role-${st.id}`);
+  if (roleEl) roleEl.textContent = st.reachable ? st.state.toUpperCase() : 'UNREACHABLE';
+
+  flashVal(`#ci-${st.id}`, st.commitIndex,  prev?.commitIndex);
+  flashVal(`#ai-${st.id}`, st.appliedIndex, prev?.appliedIndex);
+
+  const laEl = qs(`#la-${st.id}`);
+  if (laEl) laEl.textContent = resolveNodeDisplay(st.leaderAddr);
+}
+
+function flashVal(sel, val, prevVal) {
+  const e = qs(sel);
+  if (!e) return;
+  e.textContent = val;
+  if (prevVal !== undefined && prevVal !== null && val !== prevVal) {
+    e.classList.remove('flash');
+    void e.offsetWidth;
+    e.classList.add('flash');
+    setTimeout(() => e.classList.remove('flash'), 1200);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// HUD
+// ════════════════════════════════════════════════════════════════
+function updateHUD(states) {
+  const leader  = states.find(s => s.state==='leader' && s.reachable);
+  const online  = states.filter(s => s.reachable).length;
+  const total   = states.length;
+
+  const hudLeader = qs('#hud-leader');
+  const hudTerm   = qs('#hud-term');
+  const hudCommit = qs('#hud-commit');
+  const hudOnline = qs('#hud-online');
+  const hudLag    = qs('#hud-lag');
+
+  if (hudLeader) { hudLeader.textContent = leader ? leader.id : '—'; hudLeader.className = 'hv' + (leader ? ' leader-val' : ''); }
+  if (hudTerm)   hudTerm.textContent   = leader ? leader.term  : '—';
+  if (hudCommit) hudCommit.textContent = leader ? leader.commitIndex : '—';
+
+  const onlineTxt = `${online} / ${total}`;
+  if (hudOnline) { hudOnline.textContent = onlineTxt; hudOnline.className = 'hv' + (online===total ? ' ok-val' : online>1 ? ' warn-val' : ''); }
+
+  if (hudLag) {
+    if (!leader || online < 2) { hudLag.textContent = '—'; hudLag.className = 'hv'; }
+    else {
+      const followers = states.filter(s => s.id !== leader.id && s.reachable);
+      const maxLag = followers.length ? Math.max(...followers.map(f => leader.commitIndex - f.appliedIndex)) : 0;
+      if (maxLag <= 0) { hudLag.textContent = 'synced'; hudLag.className = 'hv ok-val'; }
+      else             { hudLag.textContent = `${maxLag} entries`; hudLag.className = 'hv warn-val'; }
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Cluster badge
+// ════════════════════════════════════════════════════════════════
+function updateBadge(states) {
+  const reachable = states.filter(s=>s.reachable).length;
+  const hasLeader = states.some(s=>s.state==='leader');
+  const dot=qs('#cluster-dot'), lbl=qs('#cluster-label');
+  let cls, txt;
+  if (reachable===states.length && hasLeader) { cls='healthy';  txt='HEALTHY'; }
+  else if (reachable>1)                       { cls='degraded'; txt='DEGRADED'; }
+  else                                         { cls='down';     txt='UNHEALTHY'; }
+  dot.className=cls; lbl.className=cls; lbl.textContent=txt;
+}
+
+// ════════════════════════════════════════════════════════════════
+// Formation lines
+// ════════════════════════════════════════════════════════════════
+function updateFormationLines() {
+  const g = qs('#form-g');
+  if (!g) return;
+  while (g.firstChild) g.removeChild(g.firstChild);
+
+  const leader = Object.values(nodeStates).find(s=>s.state==='leader'&&s.reachable);
+  if (!leader) return;
+  const from = getShipCenter(leader.id);
+  if (!from) return;
+
+  Object.values(nodeStates).forEach(st => {
+    if (st.id === leader.id || !st.reachable) return;
+    const to = getShipCenter(st.id);
+    if (!to) return;
+
+    // Dashed formation line
+    const line = svgEl('line');
+    line.setAttribute('x1',from.x); line.setAttribute('y1',from.y);
+    line.setAttribute('x2',to.x);   line.setAttribute('y2',to.y);
+    line.setAttribute('stroke','#4fc3f7'); line.setAttribute('stroke-width','0.7');
+    line.setAttribute('stroke-dasharray','3 11'); line.setAttribute('opacity','0.15');
+    g.appendChild(line);
+
+    // Midpoint tactical marker
+    const mx=(from.x+to.x)/2, my=(from.y+to.y)/2;
+    const mk = svgEl('circle');
+    mk.setAttribute('cx',mx.toFixed(1)); mk.setAttribute('cy',my.toFixed(1));
+    mk.setAttribute('r','2.5'); mk.setAttribute('fill','#4fc3f7'); mk.setAttribute('opacity','0.20');
+    g.appendChild(mk);
+    const mkr = svgEl('circle');
+    mkr.setAttribute('cx',mx.toFixed(1)); mkr.setAttribute('cy',my.toFixed(1));
+    mkr.setAttribute('r','5'); mkr.setAttribute('fill','none');
+    mkr.setAttribute('stroke','#4fc3f7'); mkr.setAttribute('stroke-width','0.5'); mkr.setAttribute('opacity','0.10');
+    g.appendChild(mkr);
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+// Ship center (for animation positioning)
+// ════════════════════════════════════════════════════════════════
+function getShipCenter(id) {
+  const card = qs(`#card-${id}`);
+  const layer = qs('#anim-layer');
+  if (!card || !layer) return null;
+  const cr = card.getBoundingClientRect();
+  const lr = layer.getBoundingClientRect();
+  const sw = card.querySelector('.ship-svg-wrap');
+  const sr = sw ? sw.getBoundingClientRect() : cr;
+  return {
+    x: (cr.left + cr.right) / 2 - lr.left,
+    y: sr.top + sr.height * 0.34 - lr.top,
+  };
+}
+
+// ════════════════════════════════════════════════════════════════
+// Animations
+// ════════════════════════════════════════════════════════════════
+function animatePacket(fromId, toId) {
+  const from = getShipCenter(fromId);
+  const to   = getShipCenter(toId);
+  if (!from || !to) return;
+
+  const svg   = qs('#anim-layer');
+  const trail = svgEl('line');
+  trail.setAttribute('x1',from.x); trail.setAttribute('y1',from.y);
+  trail.setAttribute('x2',from.x); trail.setAttribute('y2',from.y);
+  trail.setAttribute('stroke','#40c4ff'); trail.setAttribute('stroke-width','0.8');
+  trail.setAttribute('opacity','0.16');
+  svg.appendChild(trail);
+
+  const pkt = svgEl('circle');
+  pkt.setAttribute('r','6'); pkt.setAttribute('fill','#40c4ff');
+  pkt.setAttribute('filter','url(#glow-sm)');
+  svg.appendChild(pkt);
+
+  const start = performance.now();
+  const dur   = 640 + Math.abs(to.x - from.x) * 0.26;
+  const ease  = t => t<.5 ? 2*t*t : -1+(4-2*t)*t;
+
+  (function frame(now) {
+    const raw = (now-start)/dur;
+    if (raw>=1) { svg.removeChild(pkt); svg.removeChild(trail); return; }
+    const t = ease(Math.min(raw,1));
+    const x = (from.x+(to.x-from.x)*t).toFixed(1);
+    const y = (from.y+(to.y-from.y)*t).toFixed(1);
+    const op = (raw<.1?raw*10 : raw>.85?(1-raw)/.15 : 1).toFixed(2);
+    pkt.setAttribute('cx',x); pkt.setAttribute('cy',y); pkt.setAttribute('opacity',op);
+    trail.setAttribute('x2',x); trail.setAttribute('y2',y);
+    requestAnimationFrame(frame);
+  })(performance.now());
+}
+
+function scheduleCargoAnim(leaderId) {
+  Object.values(nodeStates)
+    .filter(s => s.id!==leaderId && s.reachable)
+    .forEach(f => setTimeout(()=>animatePacket(leaderId,f.id), Math.random()*60));
+}
+
+function animateElectionPulse(id) {
+  const c = getShipCenter(id);
+  if (!c) return;
+  const svg = qs('#anim-layer');
+
+  // Three rings, staggered, amber/gold
+  [{delay:0, color:'#ffd54f', sw:3.0},
+   {delay:180, color:'#ffb300', sw:2.0},
+   {delay:360, color:'#ff8f00', sw:1.2}].forEach(({delay,color,sw}) => {
+    setTimeout(() => {
+      const ring = svgEl('circle');
+      ring.setAttribute('cx',c.x.toFixed(1)); ring.setAttribute('cy',c.y.toFixed(1));
+      ring.setAttribute('fill','none'); ring.setAttribute('stroke',color);
+      ring.setAttribute('stroke-width',sw); ring.setAttribute('filter','url(#glow-lg)');
+      svg.appendChild(ring);
+      const s0=performance.now(), dur=1600;
+      (function frame(now) {
+        const t=Math.min((now-s0)/dur,1);
+        ring.setAttribute('r',(8+t*110).toFixed(1));
+        ring.setAttribute('opacity',(1-t).toFixed(2));
+        if (t<1) requestAnimationFrame(frame); else svg.removeChild(ring);
+      })(performance.now());
+    }, delay);
+  });
+}
+
+function triggerRecovery(id) {
+  const card = qs(`#card-${id}`);
+  if (!card) return;
+  card.classList.add('recovering');
+  setTimeout(() => card.classList.remove('recovering'), 3000);
+}
+
+// ════════════════════════════════════════════════════════════════
+// Change detection
+// ════════════════════════════════════════════════════════════════
+function detectChanges(st) {
+  const prev = prevStates[st.id];
+  if (!prev) {
+    if (st.reachable) log(`${st.id} online — ${st.state}`,'ok');
+    return;
+  }
+  if (!prev.reachable && st.reachable) {
+    log(`${st.id} recovered — engines online, state: ${st.state}`,'ok');
+    triggerRecovery(st.id);
+    animateElectionPulse(st.id);
+  }
+  if (prev.reachable && !st.reachable) {
+    log(`${st.id} unreachable — engine glow extinguished`,'err');
+  }
+  if (prev.state !== st.state && st.reachable) {
+    if (st.state==='leader') {
+      log(`${st.id} elected leader (term ${st.term})`,'warn');
+      animateElectionPulse(st.id);
+    } else if (st.state==='candidate') {
+      log(`${st.id} seeking election — candidate state`,'info');
+    } else {
+      log(`${st.id} → ${st.state}`,'info');
+    }
+  }
+  if (st.reachable && prev.term && st.term > prev.term) {
+    log(`term advanced ${prev.term} → ${st.term}`,'system');
+  }
+  if (st.reachable && prev.commitIndex !== st.commitIndex && st.commitIndex > 0) {
+    log(`log entry #${st.commitIndex} committed`,'system');
+    if (st.state==='leader') scheduleCargoAnim(st.id);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Event log
+// ════════════════════════════════════════════════════════════════
+function log(msg, type='info') {
+  const body  = qs('#log-body');
+  const entry = el('div',`log-entry ${type}`);
+  const ts    = new Date().toTimeString().slice(0,8);
+  entry.innerHTML = `<span class="log-ts">[${ts}]</span><span class="log-sep">›</span><span class="log-msg">${msg}</span>`;
+  body.insertBefore(entry, body.firstChild);
+  setTimeout(()=>entry.classList.add('fade'), 30000);
+  while (body.children.length > MAX_LOG) body.removeChild(body.lastChild);
+
+  evtCount++;
+  const ct = qs('#con-evt-ct');
+  if (ct) ct.textContent = `${evtCount} EVENT${evtCount===1?'':'S'}`;
+
+  // Blink the console dot
+  const dot = qs('#con-dot');
+  if (dot) { dot.classList.remove('blink'); void dot.offsetWidth; dot.classList.add('blink'); }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Console toggle
+// ════════════════════════════════════════════════════════════════
+function toggleConsole() {
+  const panel  = qs('#console-panel');
+  const btn    = qs('#con-toggle');
+  const closed = panel.classList.toggle('collapsed');
+  if (btn) btn.textContent = closed ? '▲' : '▼';
+}
+
+// ════════════════════════════════════════════════════════════════
+// Poll loop
+// ════════════════════════════════════════════════════════════════
+async function poll() {
+  if (!nodeConfigs.length) return;
+  const results = await Promise.all(nodeConfigs.map(fetchStatus));
+  results.forEach(st => { detectChanges(st); nodeStates[st.id]=st; updateCard(st); });
+  updateBadge(results);
+  updateHUD(results);
+  results.forEach(st => { prevStates[st.id]={...st}; });
+  setTimeout(updateFormationLines, 60);
+}
+
+// ════════════════════════════════════════════════════════════════
+// Init
+// ════════════════════════════════════════════════════════════════
+async function init() {
+  drawStars();
+  log('fleet view initializing','system');
+
+  nodeConfigs = await fetchNodeList();
+  if (!nodeConfigs.length) { log('no nodes returned from /fleet/nodes','err'); return; }
+
+  log(`discovered ${nodeConfigs.length} node(s): ${nodeConfigs.map(n=>n.id).join(', ')}`,'ok');
+  renderFleet();
+  await poll();
+  setInterval(poll, 1500);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

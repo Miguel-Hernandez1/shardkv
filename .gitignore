@@ -1,0 +1,39 @@
+# Binaries
+bin/
+
+# Go test artifacts
+*.test
+*.out
+
+# BoltDB databases (node data, created at runtime)
+*.db
+
+# Raft data directories (created at runtime)
+/data/
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.*
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Vim / Emacs swap files
+*.swp
+*.swo
+*~
+
+# JetBrains IDEs
+.idea/
+
+# VS Code
+.vscode/
+
+# Temporary directories
+/tmp/
+tmp/
