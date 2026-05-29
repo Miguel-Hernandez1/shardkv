@@ -39,7 +39,7 @@ Building this requires holding the full distributed systems stack in your head a
 
 > Open `http://localhost:3000` after `make up` (no login required)
 
-![Grafana Dashboard](docs/screenshots/grafana-dashboard.png)
+<img width="800" alt="image" src="https://github.com/user-attachments/assets/0fa4b608-c3fb-4aaf-bbfe-cdb2750024ba" />
 
 *Live metrics: operations per second, request latency (p50/p99), Raft state per node, commit vs applied index.*
 
@@ -47,7 +47,7 @@ Building this requires holding the full distributed systems stack in your head a
 
 > Run `make demo` after `make up`
 
-![CLI Failover Demo](docs/screenshots/cli-demo.png)
+<img width="800" alt="image" src="https://github.com/user-attachments/assets/4623a874-067f-4759-b087-dd47fc24e74c" />
 
 *Automated failover: write to leader → pause leader → new election → write to new leader → revive original → verify consistency across all nodes.*
 
