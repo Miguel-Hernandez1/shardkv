@@ -31,15 +31,15 @@ Building this requires holding the full distributed systems stack in your head a
 
 > Open `http://localhost:8081/fleet` after `make up`
 
-![Fleet View](docs/screenshots/fleet-view.png)
+<img width="800" alt="image" src="https://github.com/user-attachments/assets/0fa4b608-c3fb-4aaf-bbfe-cdb2750024ba" />
 
 *Three-node cluster in healthy state. Gold ship = Raft leader. Blue ships = followers. Cyan packets = log entries replicating. Gold rings = election animation on leader change.*
 
 ### Grafana Dashboard
 
 > Open `http://localhost:3000` after `make up` (no login required)
-
-<img width="800" alt="image" src="https://github.com/user-attachments/assets/0fa4b608-c3fb-4aaf-bbfe-cdb2750024ba" />
+> 
+<img width="800" alt="image" src="https://github.com/user-attachments/assets/7ec6fd43-1ce6-4535-8ac1-b6b9274e7b7a" />
 
 *Live metrics: operations per second, request latency (p50/p99), Raft state per node, commit vs applied index.*
 
