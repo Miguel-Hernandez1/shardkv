@@ -34,7 +34,6 @@
         "overrides": []
       },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-      "id": 2,
       "title": "Latency percentiles (set)",
       "type": "timeseries",
       "targets": [
@@ -68,60 +67,17 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 8 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "id": 3,
-      "title": "node1 Raft State",
+      "title": "Raft State by Node and Shard",
       "type": "stat",
-      "targets": [
-        { "expr": "shardkv_raft_state{node=\"node1\"}", "legendFormat": "node1" }
-      ]
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            { "options": { "0": { "text": "Follower" }, "1": { "text": "Candidate" }, "2": { "text": "Leader" }, "3": { "text": "Shutdown" } }, "type": "value" }
-          ],
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [
-            { "color": "blue", "value": null },
-            { "color": "yellow", "value": 1 },
-            { "color": "green", "value": 2 }
-          ]}
-        },
-        "overrides": []
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true },
+        "orientation": "auto",
+        "textMode": "value_and_name"
       },
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 8 },
-      "id": 4,
-      "title": "node2 Raft State",
-      "type": "stat",
       "targets": [
-        { "expr": "shardkv_raft_state{node=\"node2\"}", "legendFormat": "node2" }
-      ]
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            { "options": { "0": { "text": "Follower" }, "1": { "text": "Candidate" }, "2": { "text": "Leader" }, "3": { "text": "Shutdown" } }, "type": "value" }
-          ],
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [
-            { "color": "blue", "value": null },
-            { "color": "yellow", "value": 1 },
-            { "color": "green", "value": 2 }
-          ]}
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 8 },
-      "id": 5,
-      "title": "node3 Raft State",
-      "type": "stat",
-      "targets": [
-        { "expr": "shardkv_raft_state{node=\"node3\"}", "legendFormat": "node3" }
+        { "expr": "shardkv_raft_state", "legendFormat": "{{node}} shard {{shard}}" }
       ]
     },
     {
@@ -132,11 +88,25 @@
       },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "id": 6,
-      "title": "Raft Commit vs Applied Index",
+      "title": "Raft Commit vs Applied Index by Shard",
       "type": "timeseries",
       "targets": [
-        { "expr": "shardkv_raft_commit_index", "legendFormat": "commit {{node}}" },
-        { "expr": "shardkv_raft_applied_index", "legendFormat": "applied {{node}}" }
+        { "expr": "shardkv_raft_commit_index", "legendFormat": "commit {{node}} shard {{shard}}" },
+        { "expr": "shardkv_raft_applied_index", "legendFormat": "applied {{node}} shard {{shard}}" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": {}, "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "id": 8,
+      "title": "Replication Lag by Shard",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "shardkv_shard_replication_lag", "legendFormat": "{{node}} shard {{shard}}" }
       ]
     },
     {
@@ -145,7 +115,7 @@
         "defaults": { "color": { "mode": "palette-classic" }, "custom": {} },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
       "id": 7,
       "title": "Error rate",
       "type": "timeseries",
@@ -166,5 +136,5 @@
   "timezone": "browser",
   "title": "ShardKV",
   "uid": "shardkv-main",
-  "version": 1
+  "version": 2
 }
