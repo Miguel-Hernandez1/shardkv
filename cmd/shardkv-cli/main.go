@@ -43,12 +43,24 @@ func main() {
 }
 
 func cmdGet() *cobra.Command {
-	return &cobra.Command{
+	var consistency string
+	cmd := &cobra.Command{
 		Use:   "get <key>",
 		Short: "Get the value for a key",
-		Args:  cobra.ExactArgs(1),
+		Long: "Get the value for a key.\n\n" +
+			"By default this is linearizable: a node that isn't the key's shard\n" +
+			"leader redirects to that leader rather than answering locally, so the\n" +
+			"result always reflects the latest committed write. --consistency stale\n" +
+			"trades that guarantee for a faster read served by whichever node you\n" +
+			"asked, which may not have seen the most recent write yet.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			resp, err := client().Get(fmt.Sprintf("http://%s/v1/keys/%s", addr, args[0]))
+			url, err := withConsistency(fmt.Sprintf("http://%s/v1/keys/%s", addr, args[0]), consistency)
+			if err != nil {
+				return err
+			}
+
+			resp, err := client().Get(url)
 			if err != nil {
 				return err
 			}
@@ -67,6 +79,26 @@ func cmdGet() *cobra.Command {
 			fmt.Println(string(body))
 			return nil
 		},
+	}
+	cmd.Flags().StringVar(&consistency, "consistency", "", "Read consistency: linearizable (default) or stale")
+	return cmd
+}
+
+// withConsistency appends a validated ?consistency= parameter to url. An
+// empty consistency leaves url unchanged, letting the server apply its own
+// default.
+func withConsistency(rawURL, consistency string) (string, error) {
+	switch consistency {
+	case "":
+		return rawURL, nil
+	case "linearizable", "stale":
+		sep := "?"
+		if strings.Contains(rawURL, "?") {
+			sep = "&"
+		}
+		return rawURL + sep + "consistency=" + consistency, nil
+	default:
+		return "", fmt.Errorf("invalid --consistency %q: must be \"linearizable\" or \"stale\"", consistency)
 	}
 }
 
@@ -125,17 +157,27 @@ func cmdDelete() *cobra.Command {
 }
 
 func cmdScan() *cobra.Command {
-	var prefix string
+	var prefix, consistency string
 	cmd := &cobra.Command{
 		Use:   "scan",
 		Short: "List all keys (optionally filtered by prefix)",
+		Long: "List all keys (optionally filtered by prefix).\n\n" +
+			"By default this is stale: it merges whatever each shard replica has\n" +
+			"locally, without confirming every shard is caught up, since a scan\n" +
+			"already touches every shard and a linearizable one would need every\n" +
+			"one of them answered by its own leader. --consistency linearizable\n" +
+			"opts into that stronger, slower guarantee.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			url := fmt.Sprintf("http://%s/v1/keys", addr)
+			scanURL := fmt.Sprintf("http://%s/v1/keys", addr)
 			if prefix != "" {
-				url += "?prefix=" + prefix
+				scanURL += "?prefix=" + prefix
+			}
+			scanURL, err := withConsistency(scanURL, consistency)
+			if err != nil {
+				return err
 			}
 
-			resp, err := client().Get(url)
+			resp, err := client().Get(scanURL)
 			if err != nil {
 				return err
 			}
@@ -166,6 +208,7 @@ func cmdScan() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&prefix, "prefix", "", "Filter keys by prefix")
+	cmd.Flags().StringVar(&consistency, "consistency", "", "Read consistency: stale (default) or linearizable")
 	return cmd
 }
 
