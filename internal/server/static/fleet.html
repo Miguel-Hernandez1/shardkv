@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fleet View — ShardKV</title>
+<title>Fleet View - ShardKV</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -132,7 +132,7 @@ html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text
   background-size: 82px 82px;
 }
 
-/* Distant sun — upper-right */
+/* Distant sun, upper-right */
 .sun-wash   { position: absolute; inset: 0; pointer-events: none; z-index: 0;
               background: radial-gradient(ellipse at 90% 4%, rgba(255,120,0,.044) 0%, transparent 52%); }
 .sun-halo   { position: absolute; width: 580px; height: 440px; top: -120px; right: -90px;
@@ -251,7 +251,7 @@ html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text
 .node-card.state-candidate .cand-ring { animation: cand-pulse 1.8s ease-in-out infinite; }
 @keyframes cand-pulse { 0% { transform: scale(.40); opacity: .90; } 100% { transform: scale(1.55); opacity: 0; } }
 
-/* Ship glow — most important visual differentiator */
+/* Ship glow, most important visual differentiator */
 .ship-svg-wrap { transition: filter .65s; }
 .node-card.state-leader .ship-svg-wrap {
   filter:
@@ -374,7 +374,7 @@ html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text
 .log-entry + .log-entry { border-top: 1px solid rgba(255,255,255,.03); }
 .log-entry.fade { opacity: .18; }
 
-/* border-left accent — stronger, fully opaque */
+/* border-left accent, stronger, fully opaque */
 .log-entry.info   { border-left-color: rgba(64,196,255,.65); }
 .log-entry.ok     { border-left-color: rgba(0,230,118,.65); }
 .log-entry.warn   { border-left-color: rgba(255,213,79,.75); }
@@ -405,7 +405,7 @@ html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text
   <header id="hdr">
     <div class="hdr-left">
       <span class="title">FLEET VIEW</span>
-      <span class="subtitle">ShardKV &mdash; Distributed Raft Monitor</span>
+      <span class="subtitle">ShardKV - Distributed Raft Monitor</span>
     </div>
     <div id="cluster-badge">
       <div id="cluster-dot"></div>
@@ -435,12 +435,12 @@ html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text
       <!-- Shard HUD -->
       <div id="hud">
         <div class="hud-title" id="hud-title">Shard 0 Status</div>
-        <div class="hud-row"><span>LEADER</span>    <span class="hv" id="hud-leader">—</span></div>
-        <div class="hud-row"><span>TERM</span>      <span class="hv" id="hud-term">—</span></div>
+        <div class="hud-row"><span>LEADER</span>    <span class="hv" id="hud-leader">-</span></div>
+        <div class="hud-row"><span>TERM</span>      <span class="hv" id="hud-term">-</span></div>
         <div class="hud-sep"></div>
-        <div class="hud-row"><span>COMMIT</span>    <span class="hv" id="hud-commit">—</span></div>
-        <div class="hud-row"><span>ONLINE</span>    <span class="hv" id="hud-online">—</span></div>
-        <div class="hud-row"><span>REP LAG</span>  <span class="hv" id="hud-lag">—</span></div>
+        <div class="hud-row"><span>COMMIT</span>    <span class="hv" id="hud-commit">-</span></div>
+        <div class="hud-row"><span>ONLINE</span>    <span class="hv" id="hud-online">-</span></div>
+        <div class="hud-row"><span>REP LAG</span>  <span class="hv" id="hud-lag">-</span></div>
       </div>
 
       <!-- SVG: stars + formation lines + animations -->
@@ -486,7 +486,7 @@ html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text
 'use strict';
 
 // ════════════════════════════════════════════════════════════════
-// Ship SVG definitions — 1.6× scale vs original
+// Ship SVG definitions, 1.6× scale vs original
 // ════════════════════════════════════════════════════════════════
 
 const CMD_SVG = `
@@ -511,7 +511,7 @@ const CMD_SVG = `
   <polygon points="-17,20 -56,52 -30, 3" fill="#0d47a1"/>
   <polygon points=" 17,20  56,52  30, 3" fill="#0d47a1"/>
 
-  <!-- sun-side warm reflection — right face toward upper-right -->
+  <!-- sun-side warm reflection, right face toward upper-right -->
   <polygon points="17,20 56,52 30,3"       fill="#ff9500" opacity=".09"/>
   <polygon points="5,-73 17,20 5,12"        fill="#ff8c00" opacity=".07"/>
   <rect    x="7" y="48" width="10" height="18" rx="3" fill="#ff8c00" opacity=".10"/>
@@ -545,7 +545,7 @@ const CMD_SVG = `
   <rect x="-15" y="48" width="6"  height="5"  rx="1" fill="#1565c0" opacity=".75"/>
   <rect x="  9" y="48" width="6"  height="5"  rx="1" fill="#1565c0" opacity=".75"/>
 
-  <!-- wing-tip nav lights — GOLD on command ship -->
+  <!-- wing-tip nav lights, GOLD on command ship -->
   <circle cx="-56" cy="52" r="3.2" fill="#ffd54f" opacity=".95"/>
   <circle cx=" 56" cy="52" r="3.2" fill="#ffd54f" opacity=".95"/>
 
@@ -565,7 +565,7 @@ const SUP_SVG = `
   <polygon points="-13,15 -40,36 -18,-3" fill="#040c24"/>
   <polygon points=" 13,15  40,36  18,-3" fill="#040c24"/>
 
-  <!-- main hull — darker blue, no gold -->
+  <!-- main hull, darker blue, no gold -->
   <polygon points="0,-54  12,15  0,9  -12,15" fill="#0d47a1"/>
   <polygon points="0,-54  3.5,15 0,9  -3.5,15" fill="#1565c0"/>
 
@@ -573,11 +573,11 @@ const SUP_SVG = `
   <polygon points="-12,15 -40,36 -21, 2" fill="#0a3880"/>
   <polygon points=" 12,15  40,36  21, 2" fill="#0a3880"/>
 
-  <!-- wing leading edges — blue only, no gold -->
+  <!-- wing leading edges, blue only, no gold -->
   <line x1="-12" y1="15" x2="-40" y2="36" stroke="#1565c0" stroke-width="1"   opacity=".52"/>
   <line x1=" 12" y1="15" x2=" 40" y2="36" stroke="#1565c0" stroke-width="1"   opacity=".52"/>
 
-  <!-- cockpit — smaller, dimmer than command ship -->
+  <!-- cockpit, smaller, dimmer than command ship -->
   <ellipse cx="0" cy="-32" rx="7.5" ry="10.5" fill="#1565c0"/>
   <ellipse cx="0" cy="-35" rx="4.5" ry="6.5"  fill="#90caf9" opacity=".38"/>
 
@@ -585,7 +585,7 @@ const SUP_SVG = `
   <rect x="-11" y="33" width="7.5" height="12" rx="2" fill="#040c24"/>
   <rect x="  3.5" y="33" width="7.5" height="12" rx="2" fill="#040c24"/>
 
-  <!-- nav lights — BLUE on support ships -->
+  <!-- nav lights, BLUE on support ships -->
   <circle cx="-40" cy="36" r="2.2" fill="#29b6f6" opacity=".78"/>
   <circle cx=" 40" cy="36" r="2.2" fill="#29b6f6" opacity=".78"/>
 </svg>`;
@@ -714,10 +714,10 @@ function renderFleet() {
     const info = el('div','node-info');
     info.innerHTML = `
       <div class="node-id">${cfg.id.toUpperCase()}</div>
-      <div class="node-role" id="role-${cfg.id}">—</div>
-      <div class="n-row"><span>commit</span>  <span class="nv" id="ci-${cfg.id}">—</span></div>
-      <div class="n-row"><span>applied</span> <span class="nv" id="ai-${cfg.id}">—</span></div>
-      <div class="n-row"><span>leader</span>  <span class="nv" id="la-${cfg.id}" style="font-size:9.5px">—</span></div>
+      <div class="node-role" id="role-${cfg.id}">-</div>
+      <div class="n-row"><span>commit</span>  <span class="nv" id="ci-${cfg.id}">-</span></div>
+      <div class="n-row"><span>applied</span> <span class="nv" id="ai-${cfg.id}">-</span></div>
+      <div class="n-row"><span>leader</span>  <span class="nv" id="la-${cfg.id}" style="font-size:9.5px">-</span></div>
       <div class="n-row"><span>addr</span>    <span class="nv">${cfg.host_http_addr}</span></div>
     `;
 
@@ -736,7 +736,7 @@ function renderFleet() {
 const SHARD_PORT_OFFSET = 100;
 
 function resolveNodeDisplay(raftAddr, shardId) {
-  if (!raftAddr) return '—';
+  if (!raftAddr) return '-';
   const colon = raftAddr.lastIndexOf(':');
   if (colon < 0) return raftAddr;
   const port = parseInt(raftAddr.slice(colon + 1), 10);
@@ -801,15 +801,15 @@ function updateHUD(states) {
   const hudLag    = qs('#hud-lag');
 
   if (hudTitle) hudTitle.textContent = `Shard ${selectedShard} Status`;
-  if (hudLeader) { hudLeader.textContent = leader ? leader.id : '—'; hudLeader.className = 'hv' + (leader ? ' leader-val' : ''); }
-  if (hudTerm)   hudTerm.textContent   = leader ? leader.term  : '—';
-  if (hudCommit) hudCommit.textContent = leader ? leader.commitIndex : '—';
+  if (hudLeader) { hudLeader.textContent = leader ? leader.id : '-'; hudLeader.className = 'hv' + (leader ? ' leader-val' : ''); }
+  if (hudTerm)   hudTerm.textContent   = leader ? leader.term  : '-';
+  if (hudCommit) hudCommit.textContent = leader ? leader.commitIndex : '-';
 
   const onlineTxt = `${online} / ${total}`;
   if (hudOnline) { hudOnline.textContent = onlineTxt; hudOnline.className = 'hv' + (online===total ? ' ok-val' : online>1 ? ' warn-val' : ''); }
 
   if (hudLag) {
-    if (!leader || online < 2) { hudLag.textContent = '—'; hudLag.className = 'hv'; }
+    if (!leader || online < 2) { hudLag.textContent = '-'; hudLag.className = 'hv'; }
     else {
       const followers = states.filter(s => s.id !== leader.id && s.reachable);
       const maxLag = followers.length ? Math.max(...followers.map(f => leader.commitIndex - f.appliedIndex)) : 0;
@@ -820,7 +820,7 @@ function updateHUD(states) {
 }
 
 // ════════════════════════════════════════════════════════════════
-// Cluster-wide badge — reflects every shard on every node, not just
+// Cluster-wide badge, reflects every shard on every node, not just
 // the currently selected shard.
 // ════════════════════════════════════════════════════════════════
 function updateBadge() {
@@ -1038,23 +1038,23 @@ function detectChanges(st) {
   const prev = prevStates[st.id];
   const tag = `shard ${selectedShard}:`;
   if (!prev) {
-    if (st.reachable) log(`${tag} ${st.id} online — ${st.state}`,'ok');
+    if (st.reachable) log(`${tag} ${st.id} online, ${st.state}`,'ok');
     return;
   }
   if (!prev.reachable && st.reachable) {
-    log(`${tag} ${st.id} recovered — engines online, state: ${st.state}`,'ok');
+    log(`${tag} ${st.id} recovered, engines online, state: ${st.state}`,'ok');
     triggerRecovery(st.id);
     animateElectionPulse(st.id);
   }
   if (prev.reachable && !st.reachable) {
-    log(`${tag} ${st.id} unreachable — engine glow extinguished`,'err');
+    log(`${tag} ${st.id} unreachable, engine glow extinguished`,'err');
   }
   if (prev.state !== st.state && st.reachable) {
     if (st.state==='leader') {
       log(`${tag} ${st.id} elected leader (term ${st.term})`,'warn');
       animateElectionPulse(st.id);
     } else if (st.state==='candidate') {
-      log(`${tag} ${st.id} seeking election — candidate state`,'info');
+      log(`${tag} ${st.id} seeking election, candidate state`,'info');
     } else {
       log(`${tag} ${st.id} → ${st.state}`,'info');
     }

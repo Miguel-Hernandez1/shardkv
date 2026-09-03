@@ -85,7 +85,7 @@ container_for_addr() {
 }
 
 echo "╔══════════════════════════════════════════════╗"
-echo "║          ShardKV Demo — Fault Tolerance       ║"
+echo "║          ShardKV Demo - Fault Tolerance       ║"
 echo "╚══════════════════════════════════════════════╝"
 
 step "Step 1: Starting cluster (make up)"
@@ -110,7 +110,7 @@ step "Step 4: Reading from a follower (data should be replicated)..."
 sleep 1
 FOLLOWER="${NODES[1]}"
 $CLI --addr "$FOLLOWER" get "$DEMO_KEY"
-green "Follower returned the value — replication confirmed."
+green "Follower returned the value, replication confirmed."
 
 step "Step 5: Identifying shard $DEMO_SHARD's current leader container..."
 LEADER_CONTAINER=$(container_for_addr "$LEADER_ADDR")
@@ -128,7 +128,7 @@ green "New leader for shard $DEMO_SHARD: $NEW_LEADER_ADDR"
 
 step "Step 8: Writing a new key during the leadership change..."
 $CLI --addr "$NEW_LEADER_ADDR" set user:3 carol
-green "Write succeeded on new leader — shard $DEMO_SHARD remained available."
+green "Write succeeded on new leader, shard $DEMO_SHARD remained available."
 
 step "Step 9: Reviving the original leader..."
 docker unpause "$LEADER_CONTAINER"
@@ -154,6 +154,6 @@ if $ALL_OK; then
   green " Shard $DEMO_SHARD survived a leader failure while other shards were undisturbed."
   green "══════════════════════════════════════════════"
 else
-  red "Consistency check FAILED — some nodes diverged."
+  red "Consistency check FAILED, some nodes diverged."
   exit 1
 fi

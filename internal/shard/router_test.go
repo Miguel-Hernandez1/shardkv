@@ -45,7 +45,7 @@ func TestKeyToShardDistribution(t *testing.T) {
 	for i := 0; i < n; i++ {
 		counts[KeyToShard(randKey(i), numShards)]++
 	}
-	// Not a strict statistical test — just guards against a degenerate
+	// Not a strict statistical test, just guards against a degenerate
 	// mapping that dumps everything into one shard.
 	for shardID, c := range counts {
 		if c < n/numShards/4 {

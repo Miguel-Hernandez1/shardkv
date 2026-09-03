@@ -118,7 +118,7 @@ func (n *Node) Apply(cmd fsm.Command) error {
 // before a read is served.
 //
 // On the leader: calls raft.Barrier(), which submits a no-op log entry and
-// blocks until it is applied — the definitive guarantee that the FSM is current.
+// blocks until it is applied, the definitive guarantee that the FSM is current.
 //
 // On followers: raft.Barrier() is unavailable (returns ErrNotLeader). Instead
 // we poll until AppliedIndex >= CommitIndex, which means every entry the node

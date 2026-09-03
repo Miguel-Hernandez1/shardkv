@@ -89,7 +89,7 @@ fi
 TARGET_ADDR="${NODES[$TARGET_IDX]}"
 TARGET_CONTAINER="${CONTAINERS[$TARGET_IDX]}"
 
-yellow "Pausing $TARGET_CONTAINER ($TARGET_ADDR) — leader of shard $SHARD_ID"
+yellow "Pausing $TARGET_CONTAINER ($TARGET_ADDR), leader of shard $SHARD_ID"
 docker pause "$TARGET_CONTAINER"
 
 T_PAUSE=$SECONDS
@@ -103,7 +103,7 @@ fi
 
 ELAPSED=$(( SECONDS - T_PAUSE ))
 NEW_LEADER_ADDR="${NODES[$NEW_LEADER_IDX]}"
-green "New leader for shard $SHARD_ID: ${CONTAINERS[$NEW_LEADER_IDX]} ($NEW_LEADER_ADDR) — elected in ~${ELAPSED}s"
+green "New leader for shard $SHARD_ID: ${CONTAINERS[$NEW_LEADER_IDX]} ($NEW_LEADER_ADDR), elected in ~${ELAPSED}s"
 
 yellow "Resuming $TARGET_CONTAINER..."
 docker unpause "$TARGET_CONTAINER"

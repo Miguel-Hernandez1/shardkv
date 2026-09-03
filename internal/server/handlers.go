@@ -200,7 +200,7 @@ func (s *Server) handleJoin(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) redirectToLeader(w http.ResponseWriter, r *http.Request, shardID int, n *node.Node) {
 	if r.Header.Get(forwardedHeader) != "" {
-		// Already forwarded once — no leader available right now.
+		// Already forwarded once, no leader available right now.
 		http.Error(w, "no leader available", http.StatusServiceUnavailable)
 		return
 	}

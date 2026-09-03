@@ -35,7 +35,7 @@ func (s *Server) handleFleetNodes(w http.ResponseWriter, r *http.Request) {
 
 	clientHost, _, err := parseHostPort(r.Host)
 	if err != nil {
-		// r.Host may lack a port (e.g. "localhost") — use it as-is.
+		// r.Host may lack a port (e.g. "localhost"); use it as-is.
 		clientHost = r.Host
 	}
 
