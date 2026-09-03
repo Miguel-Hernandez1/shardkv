@@ -22,9 +22,11 @@ const (
 
 // Node wraps a Raft instance and the KV state machine.
 type Node struct {
-	cfg  Config
-	raft *raft.Raft
-	fsm  *fsm.KVStore
+	cfg         Config
+	raft        *raft.Raft
+	fsm         *fsm.KVStore
+	logStore    *store.BoltLogStore
+	stableStore *store.BoltStableStore
 }
 
 func New(cfg Config) (*Node, error) {
@@ -82,7 +84,7 @@ func New(cfg Config) (*Node, error) {
 		}
 	}
 
-	return &Node{cfg: cfg, raft: r, fsm: kvFSM}, nil
+	return &Node{cfg: cfg, raft: r, fsm: kvFSM, logStore: logStore, stableStore: stableStore}, nil
 }
 
 // Apply submits a command to the Raft cluster. Blocks until committed or timeout.
@@ -214,9 +216,27 @@ func (n *Node) IsLeader() bool {
 	return n.raft.State() == raft.Leader
 }
 
-// Shutdown gracefully shuts down the Raft node.
+// Shutdown gracefully shuts down the Raft node and closes its underlying
+// BoltDB log and stable stores. Closing the stores is required, not just
+// tidy: bbolt takes an exclusive file lock on open, so a process that
+// restarts this node against the same data directory (a crash-recovery
+// restart, or a test simulating one) would otherwise block forever
+// waiting for a lock this process never released.
 func (n *Node) Shutdown() error {
-	return n.raft.Shutdown().Error()
+	shutdownErr := n.raft.Shutdown().Error()
+
+	var closeErr error
+	if err := n.logStore.Close(); err != nil {
+		closeErr = fmt.Errorf("close log store: %w", err)
+	}
+	if err := n.stableStore.Close(); err != nil && closeErr == nil {
+		closeErr = fmt.Errorf("close stable store: %w", err)
+	}
+
+	if shutdownErr != nil {
+		return shutdownErr
+	}
+	return closeErr
 }
 
 // ErrNotLeader is returned when a write arrives at a non-leader node.
