@@ -37,7 +37,6 @@ func NewCluster(t *testing.T, n int) *Cluster {
 	cfg0 := node.Config{
 		NodeID:    "node1",
 		RaftAddr:  raftAddrs[0],
-		HTTPAddr:  fmt.Sprintf("127.0.0.1:%d", freePort(t)),
 		DataDir:   t.TempDir(),
 		Peers:     []string{raftAddrs[0]},
 		Bootstrap: true,
@@ -61,7 +60,6 @@ func NewCluster(t *testing.T, n int) *Cluster {
 		cfg := node.Config{
 			NodeID:    fmt.Sprintf("node%d", i+1),
 			RaftAddr:  raftAddrs[i],
-			HTTPAddr:  fmt.Sprintf("127.0.0.1:%d", freePort(t)),
 			DataDir:   t.TempDir(),
 			Bootstrap: false,
 		}
