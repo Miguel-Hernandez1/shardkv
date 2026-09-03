@@ -20,7 +20,7 @@ Building this requires holding the full distributed systems stack in your head a
 - **Consensus** - Raft leader election and log replication per shard (via `hashicorp/raft`, the same library used by Consul, Vault, and Nomad)
 - **Persistence** - a BoltDB-backed Raft log store and stable store per shard replica; file-based snapshots for log compaction
 - **Crash recovery** - a node that restarts replays each shard's log or restores from a snapshot independently; no data loss
-- **Read consistency** - a shard's leader uses `raft.Barrier()` before reads; followers poll until `AppliedIndex >= CommitIndex`
+- **Read consistency** - linearizable reads by default (redirect to the shard leader and confirm with `raft.Barrier()`), with an explicit `stale` mode to trade that guarantee for a faster local read
 - **Fault isolation** - one shard losing quorum does not take down any other shard; the cluster survives the loss of any one node
 - **Observability** - Prometheus metrics, Grafana dashboard, and a real-time browser visualization, all labeled per shard
 
@@ -89,7 +89,7 @@ Building this requires holding the full distributed systems stack in your head a
 
 **Write path:** client -> any node -> node computes the key's shard -> if not that shard's leader, `307` to that shard's leader -> leader applies to that shard's Raft log -> quorum commits -> FSM applies -> `200 OK`
 
-**Read path:** client -> any node -> node computes the key's shard -> waits until that shard's `AppliedIndex >= CommitIndex` -> reads the local shard replica's FSM -> returns value. A prefix scan fans out across every shard replica on the node and merges the results, since a key belongs to exactly one shard.
+**Read path (linearizable, the default for GET):** client -> any node -> node computes the key's shard -> if not that shard's leader, `307` to that shard's leader -> leader confirms it is current with `raft.Barrier()` -> reads the local FSM -> returns value. **Read path (`?consistency=stale`):** the receiving node answers immediately from its local shard replica's FSM, no redirect, no wait. A prefix scan fans out across every shard and merges the results, since a key belongs to exactly one shard; see [Read Consistency](#read-consistency) for how `SCAN`'s default differs from `GET`'s.
 
 ---
 
@@ -175,15 +175,20 @@ http://localhost:8081/fleet
 # Write a key (routed automatically to the correct shard's leader)
 ./bin/shardkv-cli set user:1 miguel
 
-# Read from any node (routed automatically to the correct shard, served locally)
+# Read from any node (routed automatically to the correct shard; linearizable
+# by default, so a non-leader redirects to that shard's leader just like a write)
 ./bin/shardkv-cli get user:1                        # from node1
 ./bin/shardkv-cli --addr localhost:8082 get user:1  # from node2
 ./bin/shardkv-cli --addr localhost:8083 get user:1  # from node3
 
+# Fast local read instead, with no freshness guarantee
+./bin/shardkv-cli --addr localhost:8082 get user:1 --consistency stale
+
 # Delete
 ./bin/shardkv-cli delete user:1
 
-# Scan by prefix (merged across every shard)
+# Scan by prefix (merged across every shard; stale by default, add
+# --consistency linearizable for a slower but confirmed-current scan)
 ./bin/shardkv-cli scan --prefix user:
 
 # Node status across all shards
@@ -247,9 +252,9 @@ All endpoints are available on every node. Requests are routed to the correct sh
 | Method | Path | Body | Response | Notes |
 |---|---|---|---|---|
 | `PUT` | `/v1/keys/{key}` | raw bytes | `200` | Write. Routed to the key's shard; redirects `307` to that shard's leader if needed. |
-| `GET` | `/v1/keys/{key}` | - | raw bytes | Read from any node. `404` if missing. |
+| `GET` | `/v1/keys/{key}` | - | raw bytes | Read. Default consistency is linearizable (redirects `307` to the shard leader if needed); `?consistency=stale` reads locally instead. `404` if missing. |
 | `DELETE` | `/v1/keys/{key}` | - | `200` | Write. Routed and redirected the same way as PUT. |
-| `GET` | `/v1/keys?prefix={p}` | - | JSON array | Scan. Fans out across every local shard replica and merges results. |
+| `GET` | `/v1/keys?prefix={p}` | - | JSON array | Scan. Default consistency is stale (merges every shard's local replica); `?consistency=linearizable` fetches each shard's contribution from that shard's actual leader instead. |
 | `GET` | `/v1/status` | - | JSON | Per-shard Raft state, leader address, log indices, term. |
 | `POST` | `/v1/cluster/join` | JSON | `200` | Internal, used at startup by node2/node3. Adds the joining node as a voter to every shard's Raft group. |
 
@@ -284,6 +289,19 @@ This means:
 
 ---
 
+## Read Consistency
+
+Reads take an explicit `?consistency=` parameter with two modes:
+
+- **`linearizable`** (the default for `GET`): only the key's shard leader answers. A non-leader replica redirects `307` to the leader, exactly like a write does. The leader confirms it is current with a `raft.Barrier()` (a no-op log entry committed and applied through the normal Raft path) before answering, so the result reflects every write acknowledged before the read arrived. `SCAN` also supports this mode: for any shard the receiving node doesn't lead, it fetches that shard's contribution from the shard's actual leader over an internal endpoint (`/v1/internal/shards/{id}/scan`) and merges it in, rather than settling for a partial or stale local answer.
+- **`stale`** (the default for `SCAN`): served immediately from whatever is in the local FSM, on whichever replica received the request, leader or follower, with no wait and no confirmation that it reflects the latest committed write. A replica that has fallen behind, or is on the wrong side of a network partition, can answer with data older than a caller might expect.
+
+`SCAN` defaults to stale rather than linearizable because it already fans out across every shard; making that linearizable by default would turn one bulk read into a multi-way, leader-bound round trip on every call. `GET` defaults to linearizable because a single-key read has no such fan-out cost, and it matches the CP guarantee the rest of this README claims, correctness by default, speed as an opt-in trade a caller makes deliberately.
+
+This replaces an earlier design where every read (`GET` and `SCAN` alike) polled a follower's `AppliedIndex >= CommitIndex` and served locally after up to a 1-second wait, falling back to whatever was available even if that wait expired. That scheme is not linearizable: it proves a replica has applied everything *it currently knows* is committed, but doesn't rule out that replica being stale or partitioned and simply unaware of a newer commit. `stale` mode names that tradeoff explicitly instead of applying it silently as the only option.
+
+---
+
 ## Tests
 
 ```bash
@@ -310,6 +328,13 @@ go test ./integration/... -v -timeout 120s
 - one shard losing quorum (2 of 3 replicas killed) without affecting reads or writes on any other shard
 - prefix scan and delete merged correctly across shards
 
+`integration/consistency_test.go` spins up a real cluster of `server.Server` instances (not just the lower-level `node.Node` type) to test the HTTP layer's read consistency behavior specifically:
+
+- a default `GET` against a replica that isn't the key's shard leader gets a `307` to the leader, and following it returns the correct value
+- `?consistency=stale` is served locally by a non-leader with no redirect
+- an invalid `?consistency=` value is rejected with `400`
+- a linearizable scan issued against a node that doesn't lead every shard touched by the result still returns complete, correct data, proving the internal per-shard fan-out to each shard's actual leader works end to end
+
 ---
 
 ## Benchmark
@@ -318,26 +343,27 @@ go test ./integration/... -v -timeout 120s
 make bench
 
 # Custom parameters:
-./bin/bench --addr localhost:8081,localhost:8082,localhost:8083 --ops 50000 --concurrency 64 --ratio 0.8
+./bin/bench --addr localhost:8081,localhost:8082,localhost:8083 --ops 50000 --concurrency 64 --ratio 0.8 --consistency linearizable
 ```
 
-The benchmark tool no longer assumes one cluster-wide leader. It spreads requests across every node address you give it; a write that lands on a node that is not the leader for that key's shard is transparently redirected by the server to the correct shard leader (the same `307` mechanism the CLI uses), so the tool works correctly regardless of which node currently leads which shard.
+The benchmark tool no longer assumes one cluster-wide leader. It spreads requests across every node address you give it; a write, or a linearizable read, that lands on a node that is not the leader for that key's shard is transparently redirected by the server to the correct shard leader (the same `307` mechanism the CLI uses), so the tool works correctly regardless of which node currently leads which shard. `--consistency` selects which mode the read fraction of the workload uses; it defaults to `linearizable`, matching the server's own default.
 
-**Methodology:** 3 ShardKV processes (`node1`/`node2`/`node3`), 3 shards each, all run as plain OS processes on one machine (no Docker; loopback networking with hostname aliases for `node1`/`node2`/`node3`). Each run performs 50,000 operations (80% reads, 20% writes) at 64 concurrent workers, pre-seeded with 100 keys, requests spread across all 3 node addresses. Reported numbers are from 3 consecutive runs against a freshly started cluster; no shard leader changed during any run.
+**Methodology:** 3 ShardKV processes (`node1`/`node2`/`node3`), 3 shards each, all run as plain OS processes on one machine (no Docker; loopback networking with hostname aliases for `node1`/`node2`/`node3`). Each run performs 50,000 operations (80% reads, 20% writes) at 64 concurrent workers, pre-seeded with 100 keys, requests spread across all 3 node addresses. Reported numbers are from 3 consecutive runs per mode against a freshly started cluster; no shard leader changed during any run.
 
 **Test environment:** 4-core x86_64 (Intel Xeon, 2.80GHz), 15 GiB RAM, Linux, Go 1.24.
 
-**Results (3 runs, 150,000 total operations, 0 errors):**
+**Results (3 runs per mode, 150,000 total operations per mode, 0 errors):**
 
 ```
-Ops/sec:      4,989 - 5,059  (median ~5,020)
-Latency p50:  10.4 - 10.6 ms
-Latency p99:  40.8 - 42.8 ms
-Latency p999: 53.0 - 58.5 ms
-Errors:       0
+                  linearizable (default)       stale
+Ops/sec:          2,846 - 3,162                6,371 - 6,789
+Latency p50:      19.1 - 21.3 ms                5.9 - 6.4 ms
+Latency p99:      43.9 - 47.3 ms                42.2 - 44.1 ms
+Latency p999:     58.6 - 107.2 ms               58.3 - 61.7 ms
+Errors:           0                             0
 ```
 
-These numbers are lower than a single unsharded Raft group's throughput on the same key space would be, because with 3 shards led by the same node (the common case right after startup, before elections redistribute leadership), that one node's process is doing 3x the Raft leader work of the old single-group design while handling the same request volume. They are not comparable to, and do not reuse, any previously published single-shard benchmark numbers; this is a fresh measurement of the sharded implementation on different hardware.
+That gap is the consistency/latency tradeoff made concrete: `linearizable` reads pay for a redirect to the shard leader (when the request didn't already land there) plus a `raft.Barrier()` round trip before answering; `stale` reads never wait or redirect at all, they just return whatever the receiving replica has. Neither number is comparable to, or reuses, any previously published benchmark for this project; both are fresh measurements of the current code on this machine, taken together specifically to show the tradeoff rather than a single headline number.
 
 ---
 
@@ -403,8 +429,8 @@ BoltDB gives ACID transactions, a clean Go API, and no external process. Each sh
 **Why HTTP instead of gRPC for the client API?**
 HTTP is easy to benchmark with standard tools, easy to test with `curl`, and simple to demonstrate. The internal Raft transport uses `hashicorp/raft`'s TCP transport directly, once per shard. gRPC for the client API is a future milestone.
 
-**Read consistency on followers**
-`raft.Barrier()` submits a log entry and blocks until it commits; it requires leader status. On followers, reads are served after polling until that shard's `AppliedIndex >= CommitIndex`, which guarantees every locally-known committed entry has been applied to that shard's FSM.
+**Why linearizable reads redirect to the leader instead of using a follower read protocol**
+`raft.Barrier()` submits a log entry and blocks until it commits, which requires leader status; `hashicorp/raft` has no ReadIndex-style primitive for a follower to serve a confirmed-current read without one. Redirecting a linearizable read to the leader, the same way a write already redirects, is the honest option that fits the library, rather than approximating a read-index protocol with a follower's own bookkeeping. See [Read Consistency](#read-consistency) above for the full explanation, including the `stale` mode that skips this entirely.
 
 **CAP theorem, per shard**
 Each shard is independently **CP**: consistent and partition-tolerant. During a majority partition within one shard (2+ of its 3 replicas unreachable), that shard's remaining minority stops accepting writes rather than risk split-brain, while every other shard continues operating normally.

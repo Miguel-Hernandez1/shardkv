@@ -50,6 +50,23 @@
 - [x] Benchmark tool updated to spread load across all nodes and shard
       leaders instead of assuming one cluster-wide leader
 
+## v0.3.1 - Linearizable Reads (done)
+- [x] Get/Scan take an explicit consistency: Linearizable (leader-only,
+      confirmed with raft.Barrier()) or Stale (immediate local read, no
+      wait, no freshness guarantee)
+- [x] GET defaults to linearizable and redirects to the shard leader with
+      the same 307 mechanism a write uses; `?consistency=stale` opts out
+- [x] SCAN defaults to stale (it already fans out across every shard);
+      `?consistency=linearizable` fetches each shard's contribution from
+      that shard's actual leader over a new internal endpoint instead of
+      settling for a partial or stale local answer
+- [x] Replaces the old scheme (follower polls AppliedIndex >= CommitIndex,
+      serves local state anyway after a 1s timeout even if not caught up),
+      which was not actually linearizable
+- [x] shardkv-cli and bench expose --consistency to exercise both modes
+- [x] Benchmarked both modes head to head to make the latency/consistency
+      tradeoff concrete rather than theoretical
+
 ## v0.4.0 - Raft From Scratch
 - [ ] Replace `hashicorp/raft` with a hand-written Raft implementation
 - [ ] Leader election, log replication, snapshotting; no membership changes
@@ -65,6 +82,8 @@
 - Cluster membership changes (joint consensus)
 - gRPC client API
 - TLS between nodes
-- Read-index optimization (linearizable reads without Raft log entry)
+- True Raft ReadIndex optimization (linearizable reads without committing
+  a log entry via Barrier; hashicorp/raft has no built-in primitive for
+  this, so it would mean tracking leadership confirmations manually)
 - TTL / key expiry
 - Watch / subscribe

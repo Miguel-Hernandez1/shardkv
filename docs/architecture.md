@@ -78,17 +78,17 @@ The `LogStore` and `StableStore` implement interfaces defined by `hashicorp/raft
 
 ## State Machine (FSM)
 
-Each shard replica's FSM is an in-memory `map[string][]byte` protected by a `sync.RWMutex`, scoped to that shard's key space. All mutations (SET, DELETE) flow through that shard's Raft log. Reads use `raft.Barrier()` on that shard's leader to ensure the local applied index is current before reading, or poll `AppliedIndex >= CommitIndex` on a follower.
+Each shard replica's FSM is an in-memory `map[string][]byte` protected by a `sync.RWMutex`, scoped to that shard's key space. All mutations (SET, DELETE) flow through that shard's Raft log. `node.Node.Get` and `Scan` take an explicit `Consistency`: `Linearizable` requires the local replica to be that shard's leader and confirms it with `raft.Barrier()` before reading; `Stale` reads the local FSM immediately on any replica, with no wait and no freshness guarantee. See [Read Consistency](../README.md#read-consistency) in the README for the full rationale.
 
 Snapshots encode a shard's map to JSON. Restore decodes the JSON into a fresh map. This is correct because snapshots only happen after a quorum of that shard's replicas has acknowledged all entries up to the snapshot index.
 
 ## HTTP API and Routing
 
-Client-facing API on port 8081/8082/8083, shared by every shard on a node. On each request, the server computes `shard.KeyToShard(key, numShards)` to find the target shard, then either serves it against the local replica of that shard or, for writes, checks whether the local replica is that shard's leader. If not, it returns an HTTP `307` to that shard's leader specifically, not to a single cluster-wide leader.
+Client-facing API on port 8081/8082/8083, shared by every shard on a node. On each request, the server computes `shard.KeyToShard(key, numShards)` to find the target shard. Writes always check whether the local replica is that shard's leader; if not, they get an HTTP `307` to that shard's leader specifically, not to a single cluster-wide leader. `GET` does the same by default (linearizable consistency); `?consistency=stale` skips the leader check entirely and answers from the local replica.
 
 A `X-ShardKV-Forwarded: 1` header prevents redirect loops during elections: any request carrying this header gets a `503 Service Unavailable` instead of a second redirect.
 
-Prefix scans fan out across every shard replica hosted locally and merge the results. Since a key belongs to exactly one shard, there is no possibility of a key appearing in more than one shard's results.
+Prefix scans fan out across every shard and merge the results; a key belongs to exactly one shard, so there is no possibility of a key appearing in more than one shard's results. By default (stale) each shard's contribution comes from whatever local replica this node hosts. `?consistency=linearizable` instead fetches each shard's contribution from that shard's actual leader, using an internal-only endpoint (`/v1/internal/shards/{id}/scan`) when the local replica isn't the leader, rather than merging in a possibly-stale local answer for that shard.
 
 Cluster join (`POST /v1/cluster/join`) adds a new physical node as a voter to every shard's Raft group in one request: `cluster.Manager.AddVoter` loops over every shard and calls `AddVoter` on that shard's leader replica.
 
@@ -96,7 +96,7 @@ Cluster join (`POST /v1/cluster/join`) adds a new physical node as a voter to ev
 
 Each shard is independently **CP** (Consistent + Partition Tolerant):
 
-- **Consistent**: reads on a shard go through that shard's Raft barrier or applied-index check; no stale reads. Writes to a shard are linearizable within that shard.
+- **Consistent**: by default, reads on a shard go through that shard's leader and a Raft barrier; no stale reads. Writes to a shard are linearizable within that shard. A caller can explicitly opt into `stale` reads, trading this guarantee away for lower latency.
 - **Partition Tolerant**: a shard survives the loss of a minority of its own replicas (1 of 3, in the default topology).
 - **Not available during a majority partition of one shard**: if 2 or more of a shard's 3 replicas are unreachable, that shard cannot form a quorum and stops accepting writes, returning `503`. Every other shard is unaffected and continues operating normally.
 
@@ -125,8 +125,8 @@ BoltDB gives ACID guarantees without managing file offsets, checksums, and corru
 **Why HTTP instead of gRPC for the client API?**
 HTTP is easier to demo, easier to benchmark with standard tools, and simpler to test. The internal Raft transport uses TCP directly (via `hashicorp/raft`'s `TCPTransport`), once per shard. gRPC for the client API is a future milestone.
 
-**Why reads through Barrier instead of leader-only?**
-`raft.Barrier()` allows any replica of a shard to serve reads while still guaranteeing linearizability within that shard. This avoids all read traffic for a shard concentrating on that shard's leader.
+**Why does a linearizable read redirect to the leader instead of being served by any replica?**
+`raft.Barrier()` confirms a replica's FSM is current by committing a no-op log entry through the normal Raft path, which only the leader can do; `hashicorp/raft` has no ReadIndex-style primitive that would let a follower serve a confirmed-current read without one. Redirecting a linearizable read to the leader, the same way a write already redirects, is the option that actually fits what the library provides. Every read concentrating on the leader by default is the real cost of that choice; `?consistency=stale` is the deliberate opt-out for callers who would rather read any replica and accept a weaker guarantee.
 
 ## Port Conventions
 
