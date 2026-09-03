@@ -11,19 +11,19 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mighdz/shardkv/internal/node"
+	"github.com/mighdz/shardkv/internal/cluster"
 	"github.com/mighdz/shardkv/internal/server"
 )
 
 func main() {
-	cfg := node.ConfigFromEnv()
+	cfg := cluster.ConfigFromEnv()
 
-	log.Printf("Starting ShardKV node %s | raft=%s http=%s data=%s bootstrap=%v",
-		cfg.NodeID, cfg.RaftAddr, cfg.HTTPAddr, cfg.DataDir, cfg.Bootstrap)
+	log.Printf("Starting ShardKV node %s | raft=%s http=%s data=%s shards=%d bootstrap=%v",
+		cfg.NodeID, cfg.RaftAddr, cfg.HTTPAddr, cfg.DataDir, cfg.NumShards, cfg.Bootstrap)
 
-	n, err := node.New(cfg)
+	m, err := cluster.New(cfg)
 	if err != nil {
-		log.Fatalf("create node: %v", err)
+		log.Fatalf("create cluster manager: %v", err)
 	}
 
 	if !cfg.Bootstrap && len(cfg.Peers) > 0 {
@@ -32,7 +32,7 @@ func main() {
 		}
 	}
 
-	srv := server.New(n, cfg.HTTPAddr, cfg.MetricsAddr)
+	srv := server.New(m, cfg.HTTPAddr, cfg.MetricsAddr)
 
 	go func() {
 		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
@@ -45,13 +45,15 @@ func main() {
 	<-quit
 
 	log.Printf("Shutting down node %s", cfg.NodeID)
-	if err := n.Shutdown(); err != nil {
+	if err := m.Shutdown(); err != nil {
 		log.Printf("shutdown: %v", err)
 	}
 }
 
-// joinCluster sends a join request to the bootstrap node with exponential backoff.
-func joinCluster(cfg node.Config, bootstrapHTTPAddr string) error {
+// joinCluster sends a join request to the bootstrap node with exponential
+// backoff. The bootstrap node adds this node as a voter across every
+// shard's Raft group in one round trip.
+func joinCluster(cfg cluster.Config, bootstrapRaftAddr string) error {
 	payload, _ := json.Marshal(map[string]string{
 		"node_id":   cfg.NodeID,
 		"raft_addr": cfg.RaftAddr,
@@ -59,7 +61,7 @@ func joinCluster(cfg node.Config, bootstrapHTTPAddr string) error {
 
 	// Convert Raft addr to HTTP addr for the bootstrap peer.
 	// The bootstrap node's HTTP addr is derived by convention: raft port - 1000.
-	httpAddr := raftToHTTP(bootstrapHTTPAddr)
+	httpAddr := raftToHTTP(bootstrapRaftAddr)
 
 	url := fmt.Sprintf("http://%s/v1/cluster/join", httpAddr)
 	log.Printf("Joining cluster at %s", url)
@@ -85,7 +87,7 @@ func joinCluster(cfg node.Config, bootstrapHTTPAddr string) error {
 	return fmt.Errorf("could not join cluster after 30 attempts: %v", lastErr)
 }
 
-// raftToHTTP converts a Raft address to an HTTP address.
+// raftToHTTP converts a base Raft address to an HTTP address.
 // Assumes: raft port N → HTTP port N-1000 (e.g. node1:9081 → node1:8081).
 func raftToHTTP(raftAddr string) string {
 	for i := len(raftAddr) - 1; i >= 0; i-- {

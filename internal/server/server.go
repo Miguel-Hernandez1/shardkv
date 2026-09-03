@@ -4,23 +4,25 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/mighdz/shardkv/internal/cluster"
 	"github.com/mighdz/shardkv/internal/metrics"
-	"github.com/mighdz/shardkv/internal/node"
 )
 
-// Server is the HTTP API server for a ShardKV node.
+// Server is the HTTP API server for a ShardKV node. It fronts every shard
+// replica the node's cluster.Manager hosts.
 type Server struct {
-	node        *node.Node
+	cluster     *cluster.Manager
 	httpAddr    string
 	metricsAddr string
 }
 
-func New(n *node.Node, httpAddr, metricsAddr string) *Server {
-	return &Server{node: n, httpAddr: httpAddr, metricsAddr: metricsAddr}
+func New(m *cluster.Manager, httpAddr, metricsAddr string) *Server {
+	return &Server{cluster: m, httpAddr: httpAddr, metricsAddr: metricsAddr}
 }
 
 func (s *Server) Start() error {
@@ -70,35 +72,51 @@ func (s *Server) pollRaftMetrics() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
-		state := s.node.State()
-		switch state {
-		case "Follower":
-			metrics.RaftState.Set(0)
-		case "Candidate":
-			metrics.RaftState.Set(1)
-		case "Leader":
-			metrics.RaftState.Set(2)
-		default:
-			metrics.RaftState.Set(3)
+		for _, id := range s.cluster.ShardIDs() {
+			n := s.cluster.Shard(id)
+			label := strconv.Itoa(id)
+
+			switch n.State() {
+			case "Follower":
+				metrics.RaftState.WithLabelValues(label).Set(0)
+			case "Candidate":
+				metrics.RaftState.WithLabelValues(label).Set(1)
+			case "Leader":
+				metrics.RaftState.WithLabelValues(label).Set(2)
+			default:
+				metrics.RaftState.WithLabelValues(label).Set(3)
+			}
+
+			commit := n.CommitIndex()
+			applied := n.AppliedIndex()
+			metrics.RaftCommitIndex.WithLabelValues(label).Set(float64(commit))
+			metrics.RaftAppliedIndex.WithLabelValues(label).Set(float64(applied))
+
+			lag := float64(0)
+			if commit > applied {
+				lag = float64(commit - applied)
+			}
+			metrics.ShardReplicationLag.WithLabelValues(label).Set(lag)
 		}
-		metrics.RaftCommitIndex.Set(float64(s.node.CommitIndex()))
-		metrics.RaftAppliedIndex.Set(float64(s.node.AppliedIndex()))
 	}
 }
 
-// leaderRedirectURL builds a redirect URL pointing to the leader.
+// leaderRedirectURL builds a redirect URL pointing to the leader of a
+// specific shard.
 //
-// Port convention: HTTP port = Raft port - 1000 (e.g. Raft 9081 → HTTP 8081).
-// We use the *client's* hostname (from r.Host) so that redirects work whether
-// the client connects via "localhost" (from the host machine) or the internal
-// Docker service name (e.g. "node2"). Both cases resolve correctly because the
-// port offset is the same regardless of hostname.
-func (s *Server) leaderRedirectURL(r *http.Request, leaderRaftAddr string) string {
+// Port convention: each shard's Raft port is the node's base Raft port
+// plus shardID*cluster.ShardPortOffset; HTTP port = base Raft port - 1000.
+// We use the *client's* hostname (from r.Host) so that redirects work
+// whether the client connects via "localhost" (from the host machine) or
+// the internal Docker service name (e.g. "node2"). Both cases resolve
+// correctly because the port arithmetic is the same regardless of hostname.
+func (s *Server) leaderRedirectURL(r *http.Request, shardID int, leaderRaftAddr string) string {
 	_, leaderRaftPort, err := parseHostPort(leaderRaftAddr)
 	if err != nil {
 		return ""
 	}
-	leaderHTTPPort := leaderRaftPort - 1000
+	baseRaftPort := cluster.BaseRaftPort(leaderRaftPort, shardID)
+	leaderHTTPPort := baseRaftPort - 1000
 
 	clientHost, _, err := parseHostPort(r.Host)
 	if err != nil {
