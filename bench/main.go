@@ -22,36 +22,46 @@ func main() {
 		concurrency int
 		ratio       float64
 		keySpace    int
+		consistency string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "bench",
 		Short: "ShardKV load generator",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(strings.Split(addrs, ","), ops, concurrency, ratio, keySpace)
+			if consistency != "linearizable" && consistency != "stale" {
+				return fmt.Errorf("--consistency must be \"linearizable\" or \"stale\", got %q", consistency)
+			}
+			return run(strings.Split(addrs, ","), ops, concurrency, ratio, keySpace, consistency)
 		},
 	}
 
 	cmd.Flags().StringVar(&addrs, "addr", "localhost:8081,localhost:8082,localhost:8083",
 		"Comma-separated node HTTP addresses. Each worker picks one at random per "+
-			"request; a write that lands on a non-leader replica for its shard follows "+
-			"the server's redirect to that shard's leader.")
+			"request; a write, or a linearizable read, that lands on a non-leader "+
+			"replica for its shard follows the server's redirect to that shard's leader.")
 	cmd.Flags().IntVar(&ops, "ops", 10000, "Total number of operations")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 32, "Number of concurrent workers")
 	cmd.Flags().Float64Var(&ratio, "ratio", 0.8, "Fraction of operations that are reads (0.0-1.0)")
 	cmd.Flags().IntVar(&keySpace, "key-space", 1000, "Number of distinct keys")
+	cmd.Flags().StringVar(&consistency, "consistency", "linearizable",
+		"Read consistency for the read fraction of the workload: linearizable "+
+			"(reads redirect to the shard leader, like the server's default) or "+
+			"stale (reads are served locally by whichever node was picked, faster "+
+			"but without a freshness guarantee).")
 
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
 
-func run(addrs []string, totalOps, concurrency int, readRatio float64, keySpace int) error {
+func run(addrs []string, totalOps, concurrency int, readRatio float64, keySpace int, consistency string) error {
 	for i := range addrs {
 		addrs[i] = strings.TrimSpace(addrs[i])
 	}
 
 	printShardLayout(addrs[0])
+	fmt.Printf("Read consistency: %s\n\n", consistency)
 
 	seedAddr := addrs[0]
 	if err := seedKeys(seedAddr, clamp(keySpace, 100)); err != nil {
@@ -83,7 +93,7 @@ func run(addrs []string, totalOps, concurrency int, readRatio float64, keySpace 
 
 				var err error
 				if rng.Float64() < readRatio {
-					err = doGet(c, addr, key)
+					err = doGet(c, addr, key, consistency)
 				} else {
 					err = doPut(c, addr, key, "value-"+key)
 				}
@@ -158,8 +168,9 @@ func seedKeys(addr string, n int) error {
 	return nil
 }
 
-func doGet(c *http.Client, addr, key string) error {
-	resp, err := c.Get(fmt.Sprintf("http://%s/v1/keys/%s", addr, key))
+func doGet(c *http.Client, addr, key, consistency string) error {
+	url := fmt.Sprintf("http://%s/v1/keys/%s?consistency=%s", addr, key, consistency)
+	resp, err := c.Get(url)
 	if err != nil {
 		return err
 	}
