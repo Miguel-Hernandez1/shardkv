@@ -73,9 +73,58 @@ html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text
 #cluster-label.degraded { color: var(--warn); }
 #cluster-label.down     { color: var(--danger); }
 
+/* ═══ BODY LAYOUT ═══════════════════════════════════════════════ */
+#body {
+  flex: 1; display: flex; min-height: 0;
+}
+
+/* ═══ SIDEBAR: SHARD MATRIX ═════════════════════════════════════ */
+#sidebar {
+  width: 300px; flex-shrink: 0;
+  background: rgba(5,10,20,.92);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+#sidebar::-webkit-scrollbar { width: 5px; }
+#sidebar::-webkit-scrollbar-thumb { background: rgba(64,196,255,.20); border-radius: 2px; }
+
+.sidebar-title {
+  font-size: 9px; letter-spacing: 3px; color: #4cb8e8; text-transform: uppercase;
+  margin-bottom: 4px; padding-bottom: 6px; border-bottom: 1px solid rgba(64,196,255,.18);
+}
+
+.shard-row {
+  background: var(--bg2); border: 1px solid var(--border-lo); border-radius: 3px;
+  padding: 8px 10px; cursor: pointer; transition: border-color .25s, background .25s;
+}
+.shard-row:hover { border-color: rgba(64,196,255,.35); }
+.shard-row.selected { border-color: var(--cyan); background: rgba(20,40,60,.7); box-shadow: 0 0 10px rgba(64,196,255,.12) inset; }
+.shard-row.shard-down { border-color: rgba(239,83,80,.45); }
+
+.shard-row-hdr { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+.shard-row-id { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: var(--text-hi); }
+.shard-row-leader { font-size: 9.5px; color: var(--gold); }
+.shard-row-leader.none { color: var(--danger); }
+
+.shard-replicas { display: flex; gap: 6px; }
+.replica-dot {
+  flex: 1; height: 5px; border-radius: 2px; background: var(--border-lo);
+  transition: background .3s;
+}
+.replica-dot.leader    { background: var(--gold); box-shadow: 0 0 4px rgba(255,213,79,.6); }
+.replica-dot.follower  { background: #2f6fa8; }
+.replica-dot.candidate { background: var(--purple); }
+.replica-dot.down      { background: var(--danger); opacity: .55; }
+
+.shard-row-meta { display: flex; justify-content: space-between; margin-top: 5px; font-size: 9px; color: #5a8aaa; }
+.shard-row-meta .mv { color: #b8d4ea; font-variant-numeric: tabular-nums; }
+.shard-row-meta .lag-warn { color: var(--warn); }
+
 /* ═══ SPACE ═════════════════════════════════════════════════════ */
 #space {
-  flex: 1; position: relative; overflow: hidden;
+  flex: 1; position: relative; overflow: hidden; min-width: 0;
   background: var(--bg);
   background-image:
     linear-gradient(rgba(64,196,255,.022) 1px, transparent 1px),
@@ -125,7 +174,7 @@ html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text
 /* ═══ HUD ════════════════════════════════════════════════════════ */
 #hud {
   position: absolute; top: 18px; left: 20px; z-index: 8;
-  width: 188px;
+  width: 200px;
   background: rgba(5,10,20,.82);
   border: 1px solid rgba(64,196,255,.18);
   border-radius: 3px;
@@ -280,7 +329,7 @@ html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text
   border-top: 2px solid rgba(64,196,255,.25);
   display: flex; flex-direction: column;
   transition: height .28s ease;
-  height: 240px;
+  height: 200px;
 }
 #console-panel.collapsed { height: 36px; }
 
@@ -364,47 +413,57 @@ html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text
     </div>
   </header>
 
-  <!-- ── Space ──────────────────────────────────────────────── -->
-  <div id="space">
-    <div class="sun-wash"></div>
-    <div class="sun-halo"></div>
-    <div class="sun-corona"></div>
-    <div class="sun-core"></div>
-    <div class="nebula nb1"></div>
-    <div class="nebula nb2"></div>
-    <div class="nebula nb3"></div>
-    <div class="nebula nb4"></div>
+  <div id="body">
 
-    <!-- Cluster HUD -->
-    <div id="hud">
-      <div class="hud-title">Cluster Status</div>
-      <div class="hud-row"><span>LEADER</span>    <span class="hv" id="hud-leader">—</span></div>
-      <div class="hud-row"><span>TERM</span>      <span class="hv" id="hud-term">—</span></div>
-      <div class="hud-sep"></div>
-      <div class="hud-row"><span>COMMIT</span>    <span class="hv" id="hud-commit">—</span></div>
-      <div class="hud-row"><span>ONLINE</span>    <span class="hv" id="hud-online">—</span></div>
-      <div class="hud-row"><span>REP LAG</span>  <span class="hv" id="hud-lag">—</span></div>
+    <!-- ── Sidebar: shard matrix ────────────────────────────── -->
+    <aside id="sidebar">
+      <div class="sidebar-title">Shard Membership</div>
+      <div id="shard-rows"></div>
+    </aside>
+
+    <!-- ── Space ──────────────────────────────────────────────── -->
+    <div id="space">
+      <div class="sun-wash"></div>
+      <div class="sun-halo"></div>
+      <div class="sun-corona"></div>
+      <div class="sun-core"></div>
+      <div class="nebula nb1"></div>
+      <div class="nebula nb2"></div>
+      <div class="nebula nb3"></div>
+      <div class="nebula nb4"></div>
+
+      <!-- Shard HUD -->
+      <div id="hud">
+        <div class="hud-title" id="hud-title">Shard 0 Status</div>
+        <div class="hud-row"><span>LEADER</span>    <span class="hv" id="hud-leader">—</span></div>
+        <div class="hud-row"><span>TERM</span>      <span class="hv" id="hud-term">—</span></div>
+        <div class="hud-sep"></div>
+        <div class="hud-row"><span>COMMIT</span>    <span class="hv" id="hud-commit">—</span></div>
+        <div class="hud-row"><span>ONLINE</span>    <span class="hv" id="hud-online">—</span></div>
+        <div class="hud-row"><span>REP LAG</span>  <span class="hv" id="hud-lag">—</span></div>
+      </div>
+
+      <!-- SVG: stars + formation lines + animations -->
+      <svg id="anim-layer" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="glow-sm" x="-50%"  y="-50%"  width="200%" height="200%">
+            <feGaussianBlur stdDeviation="3"  result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glow-lg" x="-100%" y="-100%" width="300%" height="300%">
+            <feGaussianBlur stdDeviation="8"  result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glow-star" x="-200%" y="-200%" width="500%" height="500%">
+            <feGaussianBlur stdDeviation="1.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <g id="stars-g"></g>
+        <g id="form-g"></g>
+      </svg>
+
+      <div id="fleet"></div>
     </div>
 
-    <!-- SVG: stars + formation lines + animations -->
-    <svg id="anim-layer" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <filter id="glow-sm" x="-50%"  y="-50%"  width="200%" height="200%">
-          <feGaussianBlur stdDeviation="3"  result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-        <filter id="glow-lg" x="-100%" y="-100%" width="300%" height="300%">
-          <feGaussianBlur stdDeviation="8"  result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-        <filter id="glow-star" x="-200%" y="-200%" width="500%" height="500%">
-          <feGaussianBlur stdDeviation="1.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-      </defs>
-      <g id="stars-g"></g>
-      <g id="form-g"></g>
-    </svg>
-
-    <div id="fleet"></div>
-  </div>
+  </div><!-- #body -->
 
   <!-- ── Engineering Console ────────────────────────────────── -->
   <div id="console-panel">
@@ -534,11 +593,14 @@ const SUP_SVG = `
 // ════════════════════════════════════════════════════════════════
 // State
 // ════════════════════════════════════════════════════════════════
-let nodeConfigs = [];   // [{id, host_http_addr, raft_addr}]
-let nodeStates  = {};   // id → status
-let prevStates  = {};   // id → prev status
-let evtCount    = 0;
-const MAX_LOG   = 100;
+let nodeConfigs   = [];   // [{id, host_http_addr, raft_addr}]
+let numShards     = 0;
+let statusByNode  = {};   // nodeId → {reachable, shards: [{shardId,state,leaderAddr,commitIndex,appliedIndex,term}]}
+let selectedShard = 0;
+let nodeStates    = {};   // id → status for the SELECTED shard (drives the animated fleet)
+let prevStates    = {};
+let evtCount      = 0;
+const MAX_LOG     = 100;
 
 // ════════════════════════════════════════════════════════════════
 // Helpers
@@ -588,8 +650,9 @@ async function fetchNodeList() {
   try {
     const r = await fetch('/fleet/nodes', {signal: AbortSignal.timeout(3000)});
     if (!r.ok) throw new Error('HTTP '+r.status);
-    return await r.json();
-  } catch(e) { log('node list unavailable: '+e.message,'err'); return []; }
+    const data = await r.json();
+    return {numShards: data.num_shards || 1, nodes: data.nodes || []};
+  } catch(e) { log('node list unavailable: '+e.message,'err'); return {numShards: 1, nodes: []}; }
 }
 
 async function fetchStatus(cfg) {
@@ -598,18 +661,35 @@ async function fetchStatus(cfg) {
     const r    = await fetch(url, {signal: AbortSignal.timeout(2000)});
     if (!r.ok) throw new Error('HTTP '+r.status);
     const data = await r.json();
-    return {
-      id:           data.node_id || cfg.id,
-      state:        (data.raft_state||'').toLowerCase(),
-      leaderAddr:   data.leader_addr  || '',
-      commitIndex:  data.commit_index  || 0,
-      appliedIndex: data.applied_index || 0,
-      term:         data.term          || 0,
-      reachable:    true,
-    };
+    const shards = (data.shards || []).map(s => ({
+      shardId:      s.shard_id,
+      state:        (s.raft_state||'').toLowerCase(),
+      leaderAddr:   s.leader_addr  || '',
+      commitIndex:  s.commit_index  || 0,
+      appliedIndex: s.applied_index || 0,
+      term:         s.term          || 0,
+    }));
+    return {id: data.node_id || cfg.id, reachable: true, shards};
   } catch(_) {
-    return {id:cfg.id, state:'down', leaderAddr:'', commitIndex:0, appliedIndex:0, term:0, reachable:false};
+    const shards = [];
+    for (let i=0; i<numShards; i++) {
+      shards.push({shardId:i, state:'down', leaderAddr:'', commitIndex:0, appliedIndex:0, term:0});
+    }
+    return {id: cfg.id, reachable: false, shards};
   }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Derive the flat per-node state array for one shard, in the shape
+// the animated fleet view expects.
+// ════════════════════════════════════════════════════════════════
+function statesForShard(shardId) {
+  return nodeConfigs.map(cfg => {
+    const st = statusByNode[cfg.id];
+    const sh = st && st.shards.find(s => s.shardId === shardId);
+    if (!st || !sh) return {id: cfg.id, state:'down', leaderAddr:'', commitIndex:0, appliedIndex:0, term:0, reachable:false};
+    return {id: cfg.id, reachable: st.reachable, ...sh};
+  });
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -648,20 +728,22 @@ function renderFleet() {
 }
 
 // ════════════════════════════════════════════════════════════════
-// Resolve a Raft address to a human-readable node ID.
-// LeaderAddr() returns the internal Raft transport address (e.g.
-// "172.19.0.5:9081" in Docker). Match by port against nodeConfigs
-// raft_addr to find the configured node ID ("node1", "node2", …).
-// Falls back to the raw address if no match is found.
+// Resolve a Raft address to a human-readable node ID. Shard i's Raft
+// port is a node's base port + i*100 (see cluster.ShardPortOffset in
+// the Go server), so we invert that before matching against the base
+// raft_addr in nodeConfigs.
 // ════════════════════════════════════════════════════════════════
-function resolveNodeDisplay(raftAddr) {
+const SHARD_PORT_OFFSET = 100;
+
+function resolveNodeDisplay(raftAddr, shardId) {
   if (!raftAddr) return '—';
   const colon = raftAddr.lastIndexOf(':');
   if (colon < 0) return raftAddr;
-  const port = raftAddr.slice(colon + 1);
+  const port = parseInt(raftAddr.slice(colon + 1), 10);
+  const basePort = port - shardId * SHARD_PORT_OFFSET;
   const match = nodeConfigs.find(cfg => {
     const c = cfg.raft_addr.lastIndexOf(':');
-    return c >= 0 && cfg.raft_addr.slice(c + 1) === port;
+    return c >= 0 && parseInt(cfg.raft_addr.slice(c + 1), 10) === basePort;
   });
   return match ? match.id : raftAddr;
 }
@@ -688,7 +770,7 @@ function updateCard(st) {
   flashVal(`#ai-${st.id}`, st.appliedIndex, prev?.appliedIndex);
 
   const laEl = qs(`#la-${st.id}`);
-  if (laEl) laEl.textContent = resolveNodeDisplay(st.leaderAddr);
+  if (laEl) laEl.textContent = resolveNodeDisplay(st.leaderAddr, selectedShard);
 }
 
 function flashVal(sel, val, prevVal) {
@@ -704,19 +786,21 @@ function flashVal(sel, val, prevVal) {
 }
 
 // ════════════════════════════════════════════════════════════════
-// HUD
+// HUD (for the currently selected shard)
 // ════════════════════════════════════════════════════════════════
 function updateHUD(states) {
   const leader  = states.find(s => s.state==='leader' && s.reachable);
   const online  = states.filter(s => s.reachable).length;
   const total   = states.length;
 
+  const hudTitle  = qs('#hud-title');
   const hudLeader = qs('#hud-leader');
   const hudTerm   = qs('#hud-term');
   const hudCommit = qs('#hud-commit');
   const hudOnline = qs('#hud-online');
   const hudLag    = qs('#hud-lag');
 
+  if (hudTitle) hudTitle.textContent = `Shard ${selectedShard} Status`;
   if (hudLeader) { hudLeader.textContent = leader ? leader.id : '—'; hudLeader.className = 'hv' + (leader ? ' leader-val' : ''); }
   if (hudTerm)   hudTerm.textContent   = leader ? leader.term  : '—';
   if (hudCommit) hudCommit.textContent = leader ? leader.commitIndex : '—';
@@ -736,17 +820,81 @@ function updateHUD(states) {
 }
 
 // ════════════════════════════════════════════════════════════════
-// Cluster badge
+// Cluster-wide badge — reflects every shard on every node, not just
+// the currently selected shard.
 // ════════════════════════════════════════════════════════════════
-function updateBadge(states) {
-  const reachable = states.filter(s=>s.reachable).length;
-  const hasLeader = states.some(s=>s.state==='leader');
+function updateBadge() {
+  const nodeList = Object.values(statusByNode);
   const dot=qs('#cluster-dot'), lbl=qs('#cluster-label');
+  if (!nodeList.length) { dot.className=''; lbl.className=''; lbl.textContent='CONNECTING'; return; }
+
+  const reachableNodes = nodeList.filter(n => n.reachable).length;
+  let shardsWithLeader = 0;
+  for (let i=0; i<numShards; i++) {
+    if (nodeList.some(n => n.reachable && n.shards.find(s => s.shardId===i && s.state==='leader'))) {
+      shardsWithLeader++;
+    }
+  }
+
   let cls, txt;
-  if (reachable===states.length && hasLeader) { cls='healthy';  txt='HEALTHY'; }
-  else if (reachable>1)                       { cls='degraded'; txt='DEGRADED'; }
-  else                                         { cls='down';     txt='UNHEALTHY'; }
+  if (reachableNodes===nodeList.length && shardsWithLeader===numShards) { cls='healthy';  txt='HEALTHY'; }
+  else if (shardsWithLeader > 0)                                        { cls='degraded'; txt='DEGRADED'; }
+  else                                                                   { cls='down';     txt='UNHEALTHY'; }
   dot.className=cls; lbl.className=cls; lbl.textContent=txt;
+}
+
+// ════════════════════════════════════════════════════════════════
+// Shard matrix sidebar
+// ════════════════════════════════════════════════════════════════
+function updateMatrix() {
+  const container = qs('#shard-rows');
+  if (!container) return;
+
+  for (let shardId=0; shardId<numShards; shardId++) {
+    let row = qs(`#shard-row-${shardId}`);
+    if (!row) {
+      row = el('div','shard-row');
+      row.id = `shard-row-${shardId}`;
+      row.onclick = () => selectShard(shardId);
+      container.appendChild(row);
+    }
+
+    const perNode = nodeConfigs.map(cfg => {
+      const st = statusByNode[cfg.id];
+      const sh = st && st.shards.find(s => s.shardId===shardId);
+      return {id: cfg.id, reachable: st?.reachable, ...(sh||{state:'down',commitIndex:0,appliedIndex:0})};
+    });
+
+    const leader = perNode.find(n => n.reachable && n.state==='leader');
+    const maxCommit = Math.max(0, ...perNode.map(n => n.commitIndex||0));
+    const maxLag = leader ? Math.max(0, ...perNode.filter(n=>n.id!==leader.id).map(n => (leader.commitIndex||0) - (n.appliedIndex||0))) : 0;
+
+    row.classList.toggle('selected', shardId===selectedShard);
+    row.classList.toggle('shard-down', !leader);
+
+    row.innerHTML = `
+      <div class="shard-row-hdr">
+        <span class="shard-row-id">SHARD ${shardId}</span>
+        <span class="shard-row-leader ${leader?'':'none'}">${leader ? leader.id : 'NO LEADER'}</span>
+      </div>
+      <div class="shard-replicas">
+        ${perNode.map(n => `<div class="replica-dot ${n.reachable ? n.state : 'down'}" title="${n.id}: ${n.reachable ? n.state : 'unreachable'}"></div>`).join('')}
+      </div>
+      <div class="shard-row-meta">
+        <span>commit <span class="mv">${maxCommit}</span></span>
+        <span>lag <span class="mv ${maxLag>0?'lag-warn':''}">${maxLag}</span></span>
+      </div>
+    `;
+  }
+}
+
+function selectShard(shardId) {
+  if (shardId === selectedShard) return;
+  selectedShard = shardId;
+  prevStates = {};
+  nodeStates = {};
+  log(`switched view to shard ${shardId}`,'system');
+  renderShard();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -884,37 +1032,38 @@ function triggerRecovery(id) {
 }
 
 // ════════════════════════════════════════════════════════════════
-// Change detection
+// Change detection (for the selected shard)
 // ════════════════════════════════════════════════════════════════
 function detectChanges(st) {
   const prev = prevStates[st.id];
+  const tag = `shard ${selectedShard}:`;
   if (!prev) {
-    if (st.reachable) log(`${st.id} online — ${st.state}`,'ok');
+    if (st.reachable) log(`${tag} ${st.id} online — ${st.state}`,'ok');
     return;
   }
   if (!prev.reachable && st.reachable) {
-    log(`${st.id} recovered — engines online, state: ${st.state}`,'ok');
+    log(`${tag} ${st.id} recovered — engines online, state: ${st.state}`,'ok');
     triggerRecovery(st.id);
     animateElectionPulse(st.id);
   }
   if (prev.reachable && !st.reachable) {
-    log(`${st.id} unreachable — engine glow extinguished`,'err');
+    log(`${tag} ${st.id} unreachable — engine glow extinguished`,'err');
   }
   if (prev.state !== st.state && st.reachable) {
     if (st.state==='leader') {
-      log(`${st.id} elected leader (term ${st.term})`,'warn');
+      log(`${tag} ${st.id} elected leader (term ${st.term})`,'warn');
       animateElectionPulse(st.id);
     } else if (st.state==='candidate') {
-      log(`${st.id} seeking election — candidate state`,'info');
+      log(`${tag} ${st.id} seeking election — candidate state`,'info');
     } else {
-      log(`${st.id} → ${st.state}`,'info');
+      log(`${tag} ${st.id} → ${st.state}`,'info');
     }
   }
   if (st.reachable && prev.term && st.term > prev.term) {
-    log(`term advanced ${prev.term} → ${st.term}`,'system');
+    log(`${tag} term advanced ${prev.term} → ${st.term}`,'system');
   }
   if (st.reachable && prev.commitIndex !== st.commitIndex && st.commitIndex > 0) {
-    log(`log entry #${st.commitIndex} committed`,'system');
+    log(`${tag} log entry #${st.commitIndex} committed`,'system');
     if (st.state==='leader') scheduleCargoAnim(st.id);
   }
 }
@@ -951,15 +1100,33 @@ function toggleConsole() {
 }
 
 // ════════════════════════════════════════════════════════════════
+// Render the animated fleet for the currently selected shard.
+// ════════════════════════════════════════════════════════════════
+function renderShard() {
+  renderFleet();
+  const states = statesForShard(selectedShard);
+  states.forEach(st => { nodeStates[st.id]=st; updateCard(st); });
+  updateHUD(states);
+  states.forEach(st => { prevStates[st.id]={...st}; });
+  setTimeout(updateFormationLines, 60);
+}
+
+// ════════════════════════════════════════════════════════════════
 // Poll loop
 // ════════════════════════════════════════════════════════════════
 async function poll() {
   if (!nodeConfigs.length) return;
+
   const results = await Promise.all(nodeConfigs.map(fetchStatus));
-  results.forEach(st => { detectChanges(st); nodeStates[st.id]=st; updateCard(st); });
-  updateBadge(results);
-  updateHUD(results);
-  results.forEach(st => { prevStates[st.id]={...st}; });
+  results.forEach(r => { statusByNode[r.id] = r; });
+
+  updateBadge();
+  updateMatrix();
+
+  const states = statesForShard(selectedShard);
+  states.forEach(st => { detectChanges(st); nodeStates[st.id]=st; updateCard(st); });
+  updateHUD(states);
+  states.forEach(st => { prevStates[st.id]={...st}; });
   setTimeout(updateFormationLines, 60);
 }
 
@@ -970,10 +1137,12 @@ async function init() {
   drawStars();
   log('fleet view initializing','system');
 
-  nodeConfigs = await fetchNodeList();
+  const list = await fetchNodeList();
+  numShards   = list.numShards;
+  nodeConfigs = list.nodes;
   if (!nodeConfigs.length) { log('no nodes returned from /fleet/nodes','err'); return; }
 
-  log(`discovered ${nodeConfigs.length} node(s): ${nodeConfigs.map(n=>n.id).join(', ')}`,'ok');
+  log(`discovered ${nodeConfigs.length} node(s), ${numShards} shard(s): ${nodeConfigs.map(n=>n.id).join(', ')}`,'ok');
   renderFleet();
   await poll();
   setInterval(poll, 1500);
