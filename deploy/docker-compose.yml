@@ -11,10 +11,13 @@ services:
       SHARDKV_METRICS_ADDR: :10081
       SHARDKV_DATA_DIR: /data/node1
       SHARDKV_PEERS: node1:9081,node2:9082,node3:9083
+      SHARDKV_NUM_SHARDS: "3"
       SHARDKV_BOOTSTRAP: "true"
     ports:
       - "8081:8081"
-      - "9081:9081"
+      - "9081:9081"   # shard 0
+      - "9181:9181"   # shard 1
+      - "9281:9281"   # shard 2
       - "10081:10081"
     volumes:
       - node1-data:/data/node1
@@ -37,10 +40,13 @@ services:
       SHARDKV_METRICS_ADDR: :10082
       SHARDKV_DATA_DIR: /data/node2
       SHARDKV_PEERS: node1:9081,node2:9082,node3:9083
+      SHARDKV_NUM_SHARDS: "3"
       SHARDKV_BOOTSTRAP: "false"
     ports:
       - "8082:8082"
-      - "9082:9082"
+      - "9082:9082"   # shard 0
+      - "9182:9182"   # shard 1
+      - "9282:9282"   # shard 2
       - "10082:10082"
     volumes:
       - node2-data:/data/node2
@@ -61,10 +67,13 @@ services:
       SHARDKV_METRICS_ADDR: :10083
       SHARDKV_DATA_DIR: /data/node3
       SHARDKV_PEERS: node1:9081,node2:9082,node3:9083
+      SHARDKV_NUM_SHARDS: "3"
       SHARDKV_BOOTSTRAP: "false"
     ports:
       - "8083:8083"
-      - "9083:9083"
+      - "9083:9083"   # shard 0
+      - "9183:9183"   # shard 1
+      - "9283:9283"   # shard 2
       - "10083:10083"
     volumes:
       - node3-data:/data/node3
