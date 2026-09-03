@@ -43,7 +43,7 @@ func TestBasicReplication(t *testing.T) {
 	c.WaitForApplied(leader.CommitIndex())
 
 	for i, n := range c.Nodes() {
-		val, ok, err := n.Get("foo")
+		val, ok, err := n.Get("foo", node.Stale)
 		if err != nil {
 			t.Fatalf("node %d get: %v", i, err)
 		}
@@ -116,7 +116,7 @@ func TestLeaderFailover(t *testing.T) {
 		if n == nil || n == leader {
 			continue
 		}
-		val, ok, err := n.Get("after")
+		val, ok, err := n.Get("after", node.Stale)
 		if err != nil {
 			t.Fatalf("get after failover: %v", err)
 		}
@@ -145,7 +145,7 @@ func TestDeleteKey(t *testing.T) {
 	}
 	c.WaitForApplied(leader.CommitIndex())
 
-	_, ok, err := leader.Get("del")
+	_, ok, err := leader.Get("del", node.Linearizable)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestScan(t *testing.T) {
 	}
 	c.WaitForApplied(leader.CommitIndex())
 
-	result, err := leader.Scan("user:")
+	result, err := leader.Scan("user:", node.Linearizable)
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestManyKeys(t *testing.T) {
 	for ni, nd := range c.Nodes() {
 		for i := 0; i < n; i++ {
 			key := fmt.Sprintf("key:%04d", i)
-			_, ok, err := nd.Get(key)
+			_, ok, err := nd.Get(key, node.Stale)
 			if err != nil {
 				t.Fatalf("node %d get %s: %v", ni, key, err)
 			}

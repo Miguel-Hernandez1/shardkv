@@ -7,6 +7,7 @@ import (
 
 	"github.com/mighdz/shardkv/integration/testutil"
 	"github.com/mighdz/shardkv/internal/fsm"
+	"github.com/mighdz/shardkv/internal/node"
 	"github.com/mighdz/shardkv/internal/shard"
 )
 
@@ -48,7 +49,7 @@ func TestShardReplicationWithinShard(t *testing.T) {
 	c.WaitForShardApplied(shardID, leader.CommitIndex())
 
 	for i, m := range c.Managers() {
-		val, ok, err := m.Shard(shardID).Get("foo")
+		val, ok, err := m.Shard(shardID).Get("foo", node.Stale)
 		if err != nil {
 			t.Fatalf("node %d get: %v", i, err)
 		}
@@ -137,7 +138,7 @@ func TestShardLeaderFailover(t *testing.T) {
 		if n == leader {
 			continue
 		}
-		val, ok, err := n.Get("after")
+		val, ok, err := n.Get("after", node.Stale)
 		if err != nil {
 			t.Fatalf("get after failover: %v", err)
 		}
@@ -176,7 +177,7 @@ func TestCrossShardConsistency(t *testing.T) {
 		seenShards[want] = true
 
 		for ni, m := range c.Managers() {
-			val, ok, err := m.Shard(want).Get(key)
+			val, ok, err := m.Shard(want).Get(key, node.Stale)
 			if err != nil {
 				t.Fatalf("node %d get %s: %v", ni, key, err)
 			}
@@ -233,7 +234,7 @@ func TestShardCrashRecovery(t *testing.T) {
 	for key, want := range written {
 		shardID := c.Managers()[0].ShardFor(key)
 		for ni, m := range c.Managers() {
-			val, ok, err := m.Shard(shardID).Get(key)
+			val, ok, err := m.Shard(shardID).Get(key, node.Stale)
 			if err != nil {
 				t.Fatalf("node %d get %s after restart: %v", ni, key, err)
 			}
@@ -306,7 +307,7 @@ func TestShardIsolationOnFailure(t *testing.T) {
 	}
 	c.WaitForShardApplied(healthyShard, stillLeader.CommitIndex())
 
-	val, ok, err := stillLeader.Get("after")
+	val, ok, err := stillLeader.Get("after", node.Linearizable)
 	if err != nil || !ok || string(val) != "still-ok" {
 		t.Fatalf("healthy shard read failed after unrelated shard failure: ok=%v err=%v val=%q", ok, err, val)
 	}
@@ -346,7 +347,7 @@ func TestScanAndDeleteAcrossShards(t *testing.T) {
 	for ni, m := range c.Managers() {
 		merged := map[string][]byte{}
 		for _, id := range m.ShardIDs() {
-			result, err := m.Shard(id).Scan("user:")
+			result, err := m.Shard(id).Scan("user:", node.Stale)
 			if err != nil {
 				t.Fatalf("node %d scan shard %d: %v", ni, id, err)
 			}
