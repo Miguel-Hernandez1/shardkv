@@ -34,6 +34,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /v1/keys", s.handleScan)
 	mux.HandleFunc("GET /v1/status", s.handleStatus)
 	mux.HandleFunc("POST /v1/cluster/join", s.handleJoin)
+	mux.HandleFunc("GET /v1/internal/shards/{shard}/scan", s.handleInternalShardScan)
 	mux.HandleFunc("GET /fleet", s.handleFleet)
 	mux.HandleFunc("GET /fleet/nodes", s.handleFleetNodes)
 

@@ -114,45 +114,72 @@ func (n *Node) Apply(cmd fsm.Command) error {
 	return nil
 }
 
-// ensureReadConsistency ensures the local FSM reflects all committed log entries
-// before a read is served.
-//
-// On the leader: calls raft.Barrier(), which submits a no-op log entry and
-// blocks until it is applied, the definitive guarantee that the FSM is current.
-//
-// On followers: raft.Barrier() is unavailable (returns ErrNotLeader). Instead
-// we poll until AppliedIndex >= CommitIndex, which means every entry the node
-// currently knows is committed has been applied to the FSM. This prevents reads
-// of uncommitted or unapplied state without requiring leader status.
-// The normal apply lag is <1 ms in-process; we allow 1 s before giving up and
-// serving the best-available local state anyway.
-func (n *Node) ensureReadConsistency() error {
-	if n.raft.State() == raft.Leader {
-		return n.raft.Barrier(raftTimeout).Error()
+// Consistency selects the guarantee a read is served under.
+type Consistency int
+
+const (
+	// Linearizable reads are only served by the shard's leader, after a
+	// raft.Barrier() confirms the leader's FSM reflects every entry
+	// committed as of the moment the read arrived. This is the only mode
+	// that rules out a stale or partitioned replica answering a read with
+	// data that predates a write the rest of the cluster already
+	// considers committed.
+	Linearizable Consistency = iota
+
+	// Stale reads are served immediately from whatever is in the local
+	// FSM, on any replica, leader or follower, with no confirmation that
+	// it reflects the latest committed writes. A replica that has fallen
+	// behind, or is on the wrong side of a network partition, can return
+	// data older than the caller might expect. Callers trade this
+	// guarantee away deliberately, in return for lower latency and the
+	// ability to read from any replica without hitting the leader.
+	Stale
+)
+
+func (c Consistency) String() string {
+	if c == Stale {
+		return "stale"
 	}
-	deadline := time.Now().Add(1 * time.Second)
-	for time.Now().Before(deadline) {
-		if n.raft.AppliedIndex() >= n.raft.CommitIndex() {
-			return nil
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	return nil
+	return "linearizable"
 }
 
-// Get reads a key from the local FSM after ensuring read consistency.
-func (n *Node) Get(key string) ([]byte, bool, error) {
-	if err := n.ensureReadConsistency(); err != nil {
-		return nil, false, err
+// requireLeaderAndBarrier enforces linearizable read semantics: it fails
+// unless this replica is currently the shard's leader, and then blocks
+// until raft.Barrier() confirms the leader's FSM is caught up to every
+// entry committed as of this call. Barrier works by committing a no-op
+// log entry through the normal Raft path and waiting for it to apply,
+// which is only possible on the leader; a stale or former leader that
+// has lost contact with a majority will time out here rather than
+// silently answering with outdated state.
+func (n *Node) requireLeaderAndBarrier() error {
+	if n.raft.State() != raft.Leader {
+		return ErrNotLeader
+	}
+	return n.raft.Barrier(raftTimeout).Error()
+}
+
+// Get reads a key from the local FSM under the requested consistency.
+// Under Linearizable, it returns ErrNotLeader if this replica is not the
+// shard's leader; callers (the HTTP layer) redirect to the leader the same
+// way a write would.
+func (n *Node) Get(key string, c Consistency) ([]byte, bool, error) {
+	if c == Linearizable {
+		if err := n.requireLeaderAndBarrier(); err != nil {
+			return nil, false, err
+		}
 	}
 	v, ok := n.fsm.Get(key)
 	return v, ok, nil
 }
 
-// Scan returns all keys whose names start with prefix, after ensuring read consistency.
-func (n *Node) Scan(prefix string) (map[string][]byte, error) {
-	if err := n.ensureReadConsistency(); err != nil {
-		return nil, err
+// Scan returns all keys whose names start with prefix, under the requested
+// consistency. Under Linearizable, it returns ErrNotLeader if this replica
+// is not the shard's leader.
+func (n *Node) Scan(prefix string, c Consistency) (map[string][]byte, error) {
+	if c == Linearizable {
+		if err := n.requireLeaderAndBarrier(); err != nil {
+			return nil, err
+		}
 	}
 	return n.fsm.Scan(prefix), nil
 }
