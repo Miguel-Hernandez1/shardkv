@@ -172,7 +172,7 @@ func cmdScan() *cobra.Command {
 func cmdStatus() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show node status",
+		Short: "Show node status across all shards",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			resp, err := client().Get(fmt.Sprintf("http://%s/v1/status", addr))
 			if err != nil {
@@ -181,11 +181,16 @@ func cmdStatus() *cobra.Command {
 			defer resp.Body.Close()
 
 			var s struct {
-				NodeID       string `json:"node_id"`
-				RaftState    string `json:"raft_state"`
-				LeaderAddr   string `json:"leader_addr"`
-				CommitIndex  uint64 `json:"commit_index"`
-				AppliedIndex uint64 `json:"applied_index"`
+				NodeID    string `json:"node_id"`
+				NumShards int    `json:"num_shards"`
+				Shards    []struct {
+					ShardID      int    `json:"shard_id"`
+					RaftState    string `json:"raft_state"`
+					LeaderAddr   string `json:"leader_addr"`
+					CommitIndex  uint64 `json:"commit_index"`
+					AppliedIndex uint64 `json:"applied_index"`
+					Term         uint64 `json:"term"`
+				} `json:"shards"`
 			}
 			if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
 				return fmt.Errorf("decode status: %w", err)
@@ -195,11 +200,13 @@ func cmdStatus() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(s)
 			}
 
-			fmt.Printf("Node ID:       %s\n", s.NodeID)
-			fmt.Printf("State:         %s\n", s.RaftState)
-			fmt.Printf("Leader:        %s\n", s.LeaderAddr)
-			fmt.Printf("Commit Index:  %d\n", s.CommitIndex)
-			fmt.Printf("Applied Index: %d\n", s.AppliedIndex)
+			fmt.Printf("Node ID:    %s\n", s.NodeID)
+			fmt.Printf("Num Shards: %d\n\n", s.NumShards)
+			fmt.Printf("%-6s %-10s %-24s %8s %8s %6s\n", "SHARD", "STATE", "LEADER", "COMMIT", "APPLIED", "TERM")
+			for _, sh := range s.Shards {
+				fmt.Printf("%-6d %-10s %-24s %8d %8d %6d\n",
+					sh.ShardID, sh.RaftState, sh.LeaderAddr, sh.CommitIndex, sh.AppliedIndex, sh.Term)
+			}
 			return nil
 		},
 	}

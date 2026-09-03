@@ -17,7 +17,7 @@ import (
 
 func main() {
 	var (
-		addr        string
+		addrs       string
 		ops         int
 		concurrency int
 		ratio       float64
@@ -28,14 +28,17 @@ func main() {
 		Use:   "bench",
 		Short: "ShardKV load generator",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(addr, ops, concurrency, ratio, keySpace)
+			return run(strings.Split(addrs, ","), ops, concurrency, ratio, keySpace)
 		},
 	}
 
-	cmd.Flags().StringVar(&addr, "addr", "localhost:8081", "Node address (will auto-discover leader)")
+	cmd.Flags().StringVar(&addrs, "addr", "localhost:8081,localhost:8082,localhost:8083",
+		"Comma-separated node HTTP addresses. Each worker picks one at random per "+
+			"request; a write that lands on a non-leader replica for its shard follows "+
+			"the server's redirect to that shard's leader.")
 	cmd.Flags().IntVar(&ops, "ops", 10000, "Total number of operations")
 	cmd.Flags().IntVar(&concurrency, "concurrency", 32, "Number of concurrent workers")
-	cmd.Flags().Float64Var(&ratio, "ratio", 0.8, "Fraction of operations that are reads (0.0–1.0)")
+	cmd.Flags().Float64Var(&ratio, "ratio", 0.8, "Fraction of operations that are reads (0.0-1.0)")
 	cmd.Flags().IntVar(&keySpace, "key-space", 1000, "Number of distinct keys")
 
 	if err := cmd.Execute(); err != nil {
@@ -43,15 +46,15 @@ func main() {
 	}
 }
 
-func run(addr string, totalOps, concurrency int, readRatio float64, keySpace int) error {
-	leaderAddr, err := discoverLeader(addr)
-	if err != nil {
-		return fmt.Errorf("discover leader: %w", err)
+func run(addrs []string, totalOps, concurrency int, readRatio float64, keySpace int) error {
+	for i := range addrs {
+		addrs[i] = strings.TrimSpace(addrs[i])
 	}
-	fmt.Printf("Leader: %s\n", leaderAddr)
 
-	// Pre-seed some keys so reads don't all 404.
-	if err := seedKeys(leaderAddr, clamp(keySpace, 100)); err != nil {
+	printShardLayout(addrs[0])
+
+	seedAddr := addrs[0]
+	if err := seedKeys(seedAddr, clamp(keySpace, 100)); err != nil {
 		return fmt.Errorf("seed keys: %w", err)
 	}
 
@@ -70,18 +73,19 @@ func run(addr string, totalOps, concurrency int, readRatio float64, keySpace int
 	var wg sync.WaitGroup
 	for w := 0; w < concurrency; w++ {
 		wg.Add(1)
-		go func() {
+		go func(rng *rand.Rand) {
 			defer wg.Done()
 			c := &http.Client{Timeout: 5 * time.Second}
 			for range work {
-				key := fmt.Sprintf("bench:key:%d", rand.Intn(keySpace))
+				addr := addrs[rng.Intn(len(addrs))]
+				key := fmt.Sprintf("bench:key:%d", rng.Intn(keySpace))
 				t0 := time.Now()
 
 				var err error
-				if rand.Float64() < readRatio {
-					err = doGet(c, leaderAddr, key)
+				if rng.Float64() < readRatio {
+					err = doGet(c, addr, key)
 				} else {
-					err = doPut(c, leaderAddr, key, "value-"+key)
+					err = doPut(c, addr, key, "value-"+key)
 				}
 
 				if err != nil {
@@ -91,7 +95,7 @@ func run(addr string, totalOps, concurrency int, readRatio float64, keySpace int
 				latencies = append(latencies, time.Since(t0).Microseconds())
 				mu.Unlock()
 			}
-		}()
+		}(rand.New(rand.NewSource(time.Now().UnixNano() + int64(w))))
 	}
 
 	wg.Wait()
@@ -110,30 +114,37 @@ func run(addr string, totalOps, concurrency int, readRatio float64, keySpace int
 	return nil
 }
 
-func discoverLeader(addr string) (string, error) {
+// printShardLayout queries one node's status and prints which node leads
+// each shard, purely for operator visibility before the run starts. It has
+// no effect on request routing: every request still goes to a randomly
+// chosen node address and relies on that node's own redirect if it isn't
+// the leader for the key's shard.
+func printShardLayout(addr string) {
 	resp, err := http.Get(fmt.Sprintf("http://%s/v1/status", addr))
 	if err != nil {
-		return "", err
+		fmt.Printf("shard layout unavailable: %v\n", err)
+		return
 	}
 	defer resp.Body.Close()
 
 	var status struct {
-		RaftState  string `json:"raft_state"`
-		LeaderAddr string `json:"leader_addr"`
+		NodeID string `json:"node_id"`
+		Shards []struct {
+			ShardID    int    `json:"shard_id"`
+			RaftState  string `json:"raft_state"`
+			LeaderAddr string `json:"leader_addr"`
+		} `json:"shards"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
-		return "", err
+		fmt.Printf("shard layout unavailable: %v\n", err)
+		return
 	}
 
-	if status.RaftState == "Leader" {
-		return addr, nil
+	fmt.Printf("Shard layout (from %s):\n", addr)
+	for _, sh := range status.Shards {
+		fmt.Printf("  shard %d leader=%s\n", sh.ShardID, sh.LeaderAddr)
 	}
-
-	// Convert Raft addr to HTTP addr.
-	if status.LeaderAddr != "" {
-		return raftToHTTP(status.LeaderAddr), nil
-	}
-	return addr, nil
+	fmt.Println()
 }
 
 func seedKeys(addr string, n int) error {
@@ -190,18 +201,6 @@ func microsToString(us int64) string {
 		return fmt.Sprintf("%dµs", us)
 	}
 	return fmt.Sprintf("%.2fms", float64(us)/1000)
-}
-
-func raftToHTTP(raftAddr string) string {
-	for i := len(raftAddr) - 1; i >= 0; i-- {
-		if raftAddr[i] == ':' {
-			host := raftAddr[:i]
-			var port int
-			fmt.Sscanf(raftAddr[i+1:], "%d", &port)
-			return fmt.Sprintf("%s:%d", host, port-1000)
-		}
-	}
-	return raftAddr
 }
 
 func clamp(a, b int) int {
