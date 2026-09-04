@@ -286,17 +286,17 @@ func retryPost(client *http.Client, url string, payload []byte) error {
 	return fmt.Errorf("gave up after 30 attempts: %w", lastErr)
 }
 
-// PeerRaftAddrs returns the base Raft addresses of every physical node in
-// the cluster, including self, regardless of which shards each one
-// hosts. This is the full node list Fleet View and similar cluster-wide
-// views need; a specific shard's own replica list (a subset under
-// partial placement) is not a substitute for it.
-func (m *Manager) PeerRaftAddrs() []string {
-	addrs := make([]string, len(m.cfg.Peers))
-	for i, p := range m.cfg.Peers {
-		addrs[i] = p.RaftAddr
-	}
-	return addrs
+// Peers returns every physical node in the cluster, including self,
+// regardless of which shards each one hosts. This is the full node list
+// Fleet View and similar cluster-wide views need; a specific shard's own
+// replica list (a subset under partial placement) is not a substitute
+// for it. Unlike deriving a node's identity from its Raft address's
+// hostname, this carries each node's real ID, which is the only thing
+// that's reliable once nodes can share a host and differ only by port.
+func (m *Manager) Peers() []Peer {
+	peers := make([]Peer, len(m.cfg.Peers))
+	copy(peers, m.cfg.Peers)
+	return peers
 }
 
 // NumShards returns the cluster-wide shard count from the locally-known

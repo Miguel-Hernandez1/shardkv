@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 )
 
 //go:embed static/fleet.html
@@ -39,7 +38,7 @@ func (s *Server) handleFleetNodes(w http.ResponseWriter, r *http.Request) {
 		clientHost = r.Host
 	}
 
-	peers := s.cluster.PeerRaftAddrs()
+	peers := s.cluster.Peers()
 
 	// Fall back to self if no peers configured.
 	if len(peers) == 0 {
@@ -59,23 +58,15 @@ func (s *Server) handleFleetNodes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nodes := make([]nodeInfo, 0, len(peers))
-	for _, raftAddr := range peers {
-		host, port, err := parseHostPort(raftAddr)
+	for _, p := range peers {
+		_, port, err := parseHostPort(p.RaftAddr)
 		if err != nil {
 			continue
 		}
-		id := host
-		if strings.Contains(host, ".") || host == "localhost" {
-			if raftAddr == s.cluster.RaftAddr() {
-				id = s.cluster.NodeID()
-			} else {
-				id = host
-			}
-		}
 		nodes = append(nodes, nodeInfo{
-			ID:           id,
+			ID:           p.NodeID,
 			HostHTTPAddr: fmt.Sprintf("%s:%d", clientHost, port-1000),
-			RaftAddr:     raftAddr,
+			RaftAddr:     p.RaftAddr,
 		})
 	}
 
