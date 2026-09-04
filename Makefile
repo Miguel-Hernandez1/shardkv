@@ -8,7 +8,7 @@ build: vet
 	mkdir -p bin
 	go build -o $(BINARY_SERVER) ./cmd/server
 	go build -o $(BINARY_CLI)    ./cmd/shardkv-cli
-	go build -o $(BINARY_BENCH)  ./bench
+	go build -o $(BINARY_BENCH)  ./cmd/bench
 
 vet:
 	go vet ./...
