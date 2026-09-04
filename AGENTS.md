@@ -35,7 +35,7 @@ Read this before doing anything else in ShardKV.
   the benchmark, don't reuse old numbers. State the methodology and test
   machine explicitly every time, since results aren't comparable across
   different hardware.
-- Keep README, ROADMAP, and docs/architecture.md in sync with the actual
+- Keep README, docs/ROADMAP.md, and docs/architecture.md in sync with the actual
   code after every change. A stale doc describing removed behavior is a
   bug.
 - Before a large architectural change, explain the current state, the

@@ -3,7 +3,7 @@ services:
   node1:
     build:
       context: ..
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
     environment:
       SHARDKV_NODE_ID: node1
       SHARDKV_RAFT_ADDR: node1:9081
@@ -32,7 +32,7 @@ services:
   node2:
     build:
       context: ..
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
     environment:
       SHARDKV_NODE_ID: node2
       SHARDKV_RAFT_ADDR: node2:9082
@@ -59,7 +59,7 @@ services:
   node3:
     build:
       context: ..
-      dockerfile: Dockerfile
+      dockerfile: deploy/Dockerfile
     environment:
       SHARDKV_NODE_ID: node3
       SHARDKV_RAFT_ADDR: node3:9083

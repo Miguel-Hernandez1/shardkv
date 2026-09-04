@@ -443,7 +443,7 @@ Each shard is independently **CP**: consistent and partition-tolerant. During a 
 
 ## Roadmap
 
-See [`ROADMAP.md`](ROADMAP.md) for the full plan.
+See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full plan.
 
 | Version | Description |
 |---|---|
