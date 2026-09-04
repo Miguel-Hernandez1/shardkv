@@ -40,7 +40,8 @@ Building this requires holding the full distributed systems stack in your head a
 
 > Open `http://localhost:3000` after `make up` (no login required)
 >
-<img width="800" alt="image" src="https://github.com/user-attachments/assets/7ec6fd43-1ce6-4535-8ac1-b6b9274e7b7a" />
+<img width="800" alt="image" src="https://github.com/user-attachments/assets/9c6c3eab-0a0d-4a74-a515-840b4ba3a8cc" />
+
 
 *Live metrics: operations per second, request latency (p50/p99), Raft state per node and shard, commit vs applied index, replication lag.*
 
