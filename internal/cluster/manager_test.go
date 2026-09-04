@@ -3,6 +3,7 @@ package cluster
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -30,23 +31,31 @@ func waitFor(t *testing.T, timeout time.Duration, fn func() bool) {
 }
 
 // newSingleManager builds a one-node, multi-shard Manager for unit tests
-// that don't need real replication.
+// that don't need real replication. A single node's own shard replicas
+// don't require any network round trip to create (it's always the first,
+// and only, replica of every shard it's assigned), so EnsureAssignedShards
+// never actually uses the client it's given here.
 func newSingleManager(t *testing.T, numShards int) *Manager {
 	t.Helper()
 	raftAddr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
 	cfg := Config{
-		NodeID:    "node1",
-		RaftAddr:  raftAddr,
-		DataDir:   t.TempDir(),
-		Peers:     []string{raftAddr},
-		Bootstrap: true,
-		NumShards: numShards,
+		NodeID:            "node1",
+		RaftAddr:          raftAddr,
+		DataDir:           t.TempDir(),
+		Peers:             []Peer{{NodeID: "node1", RaftAddr: raftAddr}},
+		Bootstrap:         true,
+		NumShards:         numShards,
+		ReplicationFactor: 1,
 	}
 	m, err := New(cfg)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 	t.Cleanup(func() { m.Shutdown() })
+
+	if err := m.EnsureAssignedShards(&http.Client{}); err != nil {
+		t.Fatalf("EnsureAssignedShards: %v", err)
+	}
 	return m
 }
 

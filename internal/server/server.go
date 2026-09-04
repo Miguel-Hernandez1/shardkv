@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -19,6 +20,7 @@ type Server struct {
 	cluster     *cluster.Manager
 	httpAddr    string
 	metricsAddr string
+	httpServer  *http.Server
 }
 
 func New(m *cluster.Manager, httpAddr, metricsAddr string) *Server {
@@ -35,14 +37,33 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /v1/status", s.handleStatus)
 	mux.HandleFunc("POST /v1/cluster/join", s.handleJoin)
 	mux.HandleFunc("GET /v1/internal/shards/{shard}/scan", s.handleInternalShardScan)
+	mux.HandleFunc("POST /v1/internal/shards/{shard}/join", s.handleInternalShardJoin)
 	mux.HandleFunc("GET /fleet", s.handleFleet)
 	mux.HandleFunc("GET /fleet/nodes", s.handleFleetNodes)
 
 	go s.startMetricsServer()
 	go s.pollRaftMetrics()
 
+	s.httpServer = &http.Server{Addr: s.httpAddr, Handler: corsMiddleware(mux)}
 	log.Printf("HTTP API listening on %s", s.httpAddr)
-	return http.ListenAndServe(s.httpAddr, corsMiddleware(mux))
+	err := s.httpServer.ListenAndServe()
+	if err == http.ErrServerClosed {
+		return nil
+	}
+	return err
+}
+
+// Shutdown gracefully stops the HTTP listener, releasing s.httpAddr so a
+// later Server for the same node can bind it again (a restarted process
+// keeps its configured address, and tests simulating a restart rely on
+// the same thing: without this, the old listener stays bound and forever
+// answers requests through the cluster.Manager it was built with, even
+// after that Manager has itself been shut down).
+func (s *Server) Shutdown(ctx context.Context) error {
+	if s.httpServer == nil {
+		return nil
+	}
+	return s.httpServer.Shutdown(ctx)
 }
 
 // corsMiddleware adds permissive CORS headers so the Fleet View page (served on

@@ -39,7 +39,7 @@ func (s *Server) handleFleetNodes(w http.ResponseWriter, r *http.Request) {
 		clientHost = r.Host
 	}
 
-	peers := s.cluster.Shard(0).PeerRaftAddrs()
+	peers := s.cluster.PeerRaftAddrs()
 
 	// Fall back to self if no peers configured.
 	if len(peers) == 0 {

@@ -11,9 +11,9 @@ import (
 // listens on 9081, shard 1 on 9181, shard 2 on 9281, and so on.
 const ShardPortOffset = 100
 
-// shardRaftAddr derives the Raft transport address a given shard uses on a
+// ShardRaftAddr derives the Raft transport address a given shard uses on a
 // physical node from that node's base Raft address.
-func shardRaftAddr(baseAddr string, shardID int) (string, error) {
+func ShardRaftAddr(baseAddr string, shardID int) (string, error) {
 	host, portStr, err := net.SplitHostPort(baseAddr)
 	if err != nil {
 		return "", fmt.Errorf("invalid raft address %q: %w", baseAddr, err)
@@ -25,9 +25,36 @@ func shardRaftAddr(baseAddr string, shardID int) (string, error) {
 	return net.JoinHostPort(host, strconv.Itoa(port+shardID*ShardPortOffset)), nil
 }
 
-// BaseRaftPort inverts shardRaftAddr's port arithmetic: given the Raft port
+// BaseRaftPort inverts ShardRaftAddr's port arithmetic: given the Raft port
 // a shard is listening on and that shard's index, it returns the physical
 // node's base Raft port (shard 0's port).
 func BaseRaftPort(shardPort, shardID int) int {
 	return shardPort - shardID*ShardPortOffset
+}
+
+// ConfigGroupPortOffset spaces out the config group's Raft TCP port from a
+// physical node's base Raft port, the same way ShardPortOffset spaces out
+// each shard's. It is set well above any realistic shard count times
+// ShardPortOffset (this project defaults to 3 shards) so the config
+// group's port never collides with a shard's.
+const ConfigGroupPortOffset = 9000
+
+// configGroupRaftAddr derives the Raft transport address the config group
+// uses on a physical node from that node's base Raft address.
+func configGroupRaftAddr(baseAddr string) (string, error) {
+	host, portStr, err := net.SplitHostPort(baseAddr)
+	if err != nil {
+		return "", fmt.Errorf("invalid raft address %q: %w", baseAddr, err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return "", fmt.Errorf("invalid port in %q: %w", baseAddr, err)
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port+ConfigGroupPortOffset)), nil
+}
+
+// BaseRaftPortFromConfigGroupPort inverts configGroupRaftAddr's port
+// arithmetic.
+func BaseRaftPortFromConfigGroupPort(configGroupPort int) int {
+	return configGroupPort - ConfigGroupPortOffset
 }
