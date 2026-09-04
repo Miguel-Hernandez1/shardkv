@@ -46,11 +46,11 @@ Building this requires holding the full distributed systems stack in your head a
 
 ### CLI - Leader failover demo
 
-> Run `make demo` after `make up`
+> Run `make demo` (it brings the cluster up itself if it isn't already)
 
 <img width="800" alt="image" src="https://github.com/user-attachments/assets/4623a874-067f-4759-b087-dd47fc24e74c" />
 
-*Automated failover: write to a shard's leader, pause that leader, new election within that shard, write to the new leader, revive the original, verify consistency across all nodes.*
+*One command drives the whole story end to end, with Fleet View open in another tab to watch it happen live: a background loop writes to a shard continuously, its leader gets killed outright (a real container stop, not a pause), the shard re-elects and keeps taking writes the whole time with no gap, the dead node comes back and replays its log to catch up, and the script verifies all three nodes agree on the final value. It also checks in on the other shards, since the node it killed happens to lead every shard by default, to show each one re-elects entirely on its own with no shared coordinator.*
 
 ---
 
@@ -177,7 +177,7 @@ Watch Fleet View for a few seconds and one of node2 or node3 should get elected,
 **To see it in action:**
 1. `make up`, start the cluster
 2. Open `http://localhost:8081/fleet`
-3. `make demo` in another terminal, watch a specific shard's leader election, cargo packet animations, and recovery while the sidebar shows the other shards are undisturbed
+3. `make demo` in another terminal, and watch shard 0 (already selected by default) take continuous writes, lose its leader, re-elect, and recover, all live; the script also points out when the other shards are electing their own replacements at the same time, independently, since the node it kills happens to lead everything by default
 
 ---
 
