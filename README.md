@@ -164,6 +164,16 @@ http://localhost:8081/fleet
 
 One thing worth knowing going in: right after `make up`, before you've written anything to the cluster, Fleet View will look mostly calm. The ships still glow and the orbit rings still turn, that part never stops, but the packet traveling between ships and the expanding ring on a new election only show up when something actually happens on the selected shard, a write landing or a leader changing. An idle cluster has neither, so it just sits there looking healthy and still. That's expected, not a sign anything's wrong, it just means there's nothing to show yet.
 
+A related thing people notice: node1 shows as the leader of every shard and just stays that way, no matter how long you leave the cluster running. That's expected too, and it's not the same thing as the cluster being idle. Node1 is the bootstrap node, the very first one to exist, so it became the leader of every shard before node2 and node3 even showed up to vote on anything. Raft doesn't rotate leadership around on its own once things are stable; a leader keeps the job for as long as it's healthy and sending heartbeats, since there's no reason to force an election otherwise. So node1 just keeps winning by default, forever, until something actually takes it down.
+
+To watch a real election happen, you have to be the thing that takes it down. Stop node1's container by hand:
+
+```bash
+docker stop deploy-node1-1
+```
+
+Watch Fleet View for a few seconds and one of node2 or node3 should get elected, that's the gold expanding ring. Bring node1 back with `docker start deploy-node1-1` and it rejoins as a follower; it does not automatically reclaim leadership just because it's the original bootstrap node, whoever's currently leading stays leading. Or skip the manual steps entirely and just run `make demo`, which does this exact sequence for you and narrates each step as it happens.
+
 **To see it in action:**
 1. `make up`, start the cluster
 2. Open `http://localhost:8081/fleet`
