@@ -190,6 +190,16 @@ func (n *Node) IsLeader() bool {
 	return n.group.Raft.State() == raft.Leader
 }
 
+// Resumed returns true if this replica already had persisted state (from
+// a previous run) when it started, rather than starting from nothing. A
+// caller deciding whether to send a join request for this replica uses
+// this: a resumed replica is already a voter in the shard's Raft group
+// from before, so joining again is both unnecessary and, if the replica
+// it would join through hasn't restarted yet, could block for no reason.
+func (n *Node) Resumed() bool {
+	return n.group.Resumed
+}
+
 // Shutdown gracefully shuts down the Raft node and closes its underlying
 // BoltDB log and stable stores.
 func (n *Node) Shutdown() error {

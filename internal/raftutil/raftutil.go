@@ -39,6 +39,17 @@ type Group struct {
 	Raft        *raft.Raft
 	LogStore    *store.BoltLogStore
 	StableStore *store.BoltStableStore
+	// Resumed is true if this replica already had persisted Raft state
+	// (log entries, a snapshot, or stable-store data) before New ran, so
+	// raft.NewRaft resumed it rather than starting from nothing. A
+	// caller that only knows how to bootstrap a brand new group, such as
+	// the config group's initial-placement proposal in
+	// internal/cluster.Manager.New, uses this to skip that step on
+	// restart: a resumed replica already has its committed state on
+	// disk and, for a replica that isn't alone any more, may never win
+	// an election by itself, so waiting for it to become leader again
+	// would either be redundant or hang.
+	Resumed bool
 }
 
 // ErrNotLeader is returned when an operation that requires leadership
@@ -80,26 +91,25 @@ func New(cfg Config, fsm raft.FSM) (*Group, error) {
 	raftCfg.SnapshotThreshold = SnapshotThreshold
 	raftCfg.SnapshotInterval = 30 * time.Second
 
+	hasState, err := raft.HasExistingState(logStore, stableStore, snapshotStore)
+	if err != nil {
+		return nil, fmt.Errorf("check existing state: %w", err)
+	}
+
 	r, err := raft.NewRaft(raftCfg, fsm, logStore, stableStore, snapshotStore, transport)
 	if err != nil {
 		return nil, fmt.Errorf("new raft: %w", err)
 	}
 
-	if cfg.Bootstrap {
-		hasState, err := raft.HasExistingState(logStore, stableStore, snapshotStore)
-		if err != nil {
-			return nil, fmt.Errorf("check existing state: %w", err)
-		}
-		if !hasState {
-			servers := BuildBootstrapServers(cfg)
-			future := r.BootstrapCluster(raft.Configuration{Servers: servers})
-			if err := future.Error(); err != nil {
-				return nil, fmt.Errorf("bootstrap cluster: %w", err)
-			}
+	if cfg.Bootstrap && !hasState {
+		servers := BuildBootstrapServers(cfg)
+		future := r.BootstrapCluster(raft.Configuration{Servers: servers})
+		if err := future.Error(); err != nil {
+			return nil, fmt.Errorf("bootstrap cluster: %w", err)
 		}
 	}
 
-	return &Group{Raft: r, LogStore: logStore, StableStore: stableStore}, nil
+	return &Group{Raft: r, LogStore: logStore, StableStore: stableStore, Resumed: hasState}, nil
 }
 
 // Shutdown gracefully shuts down the Raft group and closes its underlying

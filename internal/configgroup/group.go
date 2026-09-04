@@ -89,6 +89,12 @@ func (g *Group) IsLeader() bool {
 	return g.rg.Raft.State() == raft.Leader
 }
 
+// Resumed returns true if this replica already had persisted state (from
+// a previous run) when it started, rather than starting from nothing.
+func (g *Group) Resumed() bool {
+	return g.rg.Resumed
+}
+
 // LeaderAddr returns the Raft address of the config group's current
 // leader.
 func (g *Group) LeaderAddr() string {
