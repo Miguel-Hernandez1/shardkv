@@ -129,7 +129,7 @@ Wait ~10 seconds, then:
 # 2      Leader     172.19.0.2:9281                 4        4      2
 ```
 
-Open **Grafana** at `http://localhost:3000`, the dashboard loads automatically, no login required.
+Open **Grafana** at `http://localhost:3000` (no login needed) and you'll land on Grafana's own home page, not the ShardKV dashboard itself, so don't worry if it looks empty at first. The dashboard is already provisioned and sitting there waiting for you, you just need to click through to it: go to Dashboards in the left sidebar and open "ShardKV", or skip that step entirely and jump straight to `http://localhost:3000/d/shardkv-main`.
 
 Open **Fleet View** at `http://localhost:8081/fleet`, a real-time browser visualization of every shard's Raft state.
 
@@ -161,6 +161,8 @@ http://localhost:8081/fleet
 **Cluster badge** (top right) reflects the whole cluster: healthy only if every shard has a leader and every node is reachable.
 
 **Engineering Console** (bottom) streams events for the selected shard in real time, prefixed with the shard number.
+
+One thing worth knowing going in: right after `make up`, before you've written anything to the cluster, Fleet View will look mostly calm. The ships still glow and the orbit rings still turn, that part never stops, but the packet traveling between ships and the expanding ring on a new election only show up when something actually happens on the selected shard, a write landing or a leader changing. An idle cluster has neither, so it just sits there looking healthy and still. That's expected, not a sign anything's wrong, it just means there's nothing to show yet.
 
 **To see it in action:**
 1. `make up`, start the cluster
@@ -369,7 +371,9 @@ That gap is the consistency/latency tradeoff made concrete: `linearizable` reads
 
 ## Observability
 
-Prometheus scrapes all 3 nodes every 5 seconds. Grafana auto-provisions the datasource and dashboard. Open `http://localhost:3000`, no login, no manual configuration.
+Prometheus scrapes all 3 nodes every 5 seconds, and Grafana has the Prometheus datasource and the ShardKV dashboard both auto-provisioned, so there's genuinely nothing to configure by hand. Open `http://localhost:3000` (no login) and go to Dashboards -> ShardKV, or jump directly to `http://localhost:3000/d/shardkv-main`.
+
+If you'd rather poke at the raw metrics yourself, Prometheus's own UI is at `http://localhost:9090`. It opens on an empty query box that just says "No data queried yet", which is normal and not a sign anything's broken, it's simply waiting for you to type something. Try `up` and hit Execute to confirm all 3 nodes are being scraped, or `shardkv_raft_state` to see each shard's current Raft role.
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
