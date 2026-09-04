@@ -250,11 +250,13 @@ Or run the automated version:
 make demo
 ```
 
-To chaos-test one shard directly and confirm the others are unaffected:
+To pause and recover one specific shard's leader directly, without the rest of `make demo`'s write loop and narration:
 
 ```bash
 ./scripts/chaos.sh 1   # pause shard 1's leader, wait for shard 1 to recover, then resume it
 ```
+
+On a cluster nobody's touched yet, node1 leads every shard, so this pauses node1 no matter which shard you name, and every shard reacts, not just the one you asked for. It only isolates a single shard once that shard's leader isn't node1 anymore, for instance after `make demo` has already run once.
 
 ---
 
