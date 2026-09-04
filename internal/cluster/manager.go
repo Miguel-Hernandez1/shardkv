@@ -43,18 +43,23 @@ type Manager struct {
 }
 
 // New starts this node's config group replica, bootstrapped single-voter
-// (self only) on first boot. On the bootstrap node (cfg.Bootstrap), if
-// this is genuinely a first boot, it also proposes the cluster's initial
-// placement, every peer in cfg.Peers, cfg.NumShards, and
-// cfg.ReplicationFactor, as soon as it becomes the config group's leader
-// (near-instant, since single-voter bootstrap wins its own election
-// immediately). If instead this node is restarting with persisted state
-// from an earlier run, New waits for that state to replay locally
-// instead: the config is already committed, and a node restarting
-// alongside other voters may never win its own election again. It does
-// not create any shard replicas yet: call JoinConfigGroup (non-bootstrap
-// nodes only) and then EnsureAssignedShards to do that once the config is
-// known locally.
+// (self only) on first boot, and returns as soon as that replica exists
+// locally: it does not wait for the cluster-wide config to be known yet,
+// on any node. On a genuinely first boot, the bootstrap node's replica is
+// alone in its own group of one, so it wins its own election and commits
+// the cluster's initial placement (every peer in cfg.Peers, cfg.NumShards,
+// and cfg.ReplicationFactor) immediately, before New returns; that part
+// really is local and instant, and does not depend on any other node
+// being reachable yet. A node restarting with persisted state from an
+// earlier run is different: its config group replica now has other
+// voters, and reading its own already-committed history back out of the
+// FSM needs a real leader to confirm what's committed, which needs a
+// majority of those voters reachable, which this node cannot guarantee
+// alone at this point in its own startup. New does not wait for that:
+// call JoinConfigGroup (non-bootstrap nodes only) and then
+// EnsureAssignedShards once this node is ready to wait for the cluster
+// config to actually be known, which is also where that quorum wait, if
+// one is still needed, actually happens.
 func New(cfg Config) (*Manager, error) {
 	if cfg.NumShards <= 0 {
 		return nil, fmt.Errorf("numShards must be > 0, got %d", cfg.NumShards)
@@ -81,24 +86,7 @@ func New(cfg Config) (*Manager, error) {
 
 	m := &Manager{cfg: cfg, configGroup: cg, shards: make(map[int]*node.Node)}
 
-	if cfg.Bootstrap && cg.Resumed() {
-		// This node proposed the initial placement on some earlier run
-		// and is now restarting, not booting for the first time: the
-		// config is already committed to its persisted log, and with
-		// other voters in the group it may never win an election by
-		// itself again, so waiting to become leader here could hang
-		// forever instead of just being redundant. Wait for the local
-		// replica to replay what it already has on disk instead, the
-		// same thing JoinConfigGroup waits for on a non-bootstrap node.
-		deadline := time.Now().Add(raftutil.Timeout)
-		for cg.State().Version < 1 {
-			if time.Now().After(deadline) {
-				m.Shutdown()
-				return nil, fmt.Errorf("config group: persisted placement did not replay within %s", raftutil.Timeout)
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-	} else if cfg.Bootstrap {
+	if cfg.Bootstrap && !cg.Resumed() {
 		deadline := time.Now().Add(raftutil.Timeout)
 		for !cg.IsLeader() {
 			if time.Now().After(deadline) {
@@ -176,13 +164,25 @@ func (m *Manager) JoinConfigGroup(client *http.Client, bootstrapRaftAddr string)
 // retrying until the first replica has actually created and led the
 // shard's Raft group. This never needs to guess another node's identity
 // from its address the way bootstrapping with a full peer list up front
-// would. Requires the config group to already have a committed placement
-// locally (true immediately on the bootstrap node; true on any other
-// node after JoinConfigGroup returns).
+// would.
+//
+// It starts by waiting for the config group to actually have a committed
+// placement locally. That's immediate on a freshly bootstrapped node,
+// but a node restarting alongside other voters needs to hear from a real
+// leader before it can trust its own already-committed history, which
+// needs a majority of those voters reachable; this is where that wait
+// belongs, not in cluster.New, so that starting this node's HTTP server
+// (and this node's own health check) never depends on other nodes
+// already being up.
 func (m *Manager) EnsureAssignedShards(client *http.Client) error {
+	deadline := time.Now().Add(raftutil.Timeout)
 	state := m.configGroup.State()
-	if state.Version < 1 {
-		return fmt.Errorf("ensure assigned shards: no committed placement yet")
+	for state.Version < 1 {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("ensure assigned shards: no committed placement within %s", raftutil.Timeout)
+		}
+		time.Sleep(20 * time.Millisecond)
+		state = m.configGroup.State()
 	}
 
 	raftAddrByNodeID := make(map[string]string, len(m.cfg.Peers))

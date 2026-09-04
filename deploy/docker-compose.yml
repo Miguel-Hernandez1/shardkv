@@ -54,7 +54,7 @@ services:
       - shardkv-net
     depends_on:
       node1:
-        condition: service_healthy
+        condition: service_started
 
   node3:
     build:
@@ -81,7 +81,7 @@ services:
       - shardkv-net
     depends_on:
       node1:
-        condition: service_healthy
+        condition: service_started
 
   prometheus:
     image: prom/prometheus:latest
